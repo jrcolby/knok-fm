@@ -60,7 +60,7 @@ func main() {
 	defer redisClient.Close()
 
 	// Test Redis connection
-	if err := redisClient.Ping(context.Background()); err != nil {
+	if err := redisClient.Ping(context.Background()).Err(); err != nil {
 		log.Error("Failed to ping Redis", "error", err)
 		os.Exit(1)
 	}

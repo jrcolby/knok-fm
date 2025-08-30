@@ -108,6 +108,17 @@ func (r *ServerRepository) Create(ctx context.Context, server *domain.Server) er
 		settings = make(map[string]interface{})
 	}
 
+	// Convert settings map to JSON for JSONB column
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		r.logger.Error("Failed to marshal server settings",
+			"error", err,
+			"server_id", server.ID,
+			"settings", settings,
+		)
+		return fmt.Errorf("failed to marshal server settings: %w", err)
+	}
+
 	// Set timestamps
 	now := time.Now()
 	if server.CreatedAt.IsZero() {
@@ -118,11 +129,11 @@ func (r *ServerRepository) Create(ctx context.Context, server *domain.Server) er
 		updatedAt = *server.UpdatedAt
 	}
 
-	_, err := r.db.ExecContext(ctx, query,
+	_, err = r.db.ExecContext(ctx, query,
 		server.ID,
 		server.Name,
 		configuredChannelID,
-		settings,
+		settingsJSON,
 		server.CreatedAt,
 		updatedAt,
 	)

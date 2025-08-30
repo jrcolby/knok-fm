@@ -25,7 +25,7 @@ func (s *BotService) registerCommands() error {
 		return fmt.Errorf("failed to register commands: %w", err)
 	}
 
-	s.logger.Info("Slash commands registered successfully")
+	s.logger.Info("Slash commands registered successfully from commands.go")
 	return nil
 }
 

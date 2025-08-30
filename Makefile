@@ -39,12 +39,12 @@ dev-worker: ## Run background worker in development mode
 	@if [ -f .env ]; then echo "✅ Found .env file"; else echo "⚠️  No .env file found"; fi
 	@source .env 2>/dev/null || true && \
 	echo "🔑 Environment variables:" && \
-	echo "  DATABASE_URL: postgresql://dev:devpass@localhost:5432/knockfm" && \
+	echo "  DATABASE_URL: postgresql://dev:devpass@localhost:5432/knockfm?sslmode=disable" && \
 	echo "  REDIS_URL: redis://localhost:6379" && \
 	echo "  LOG_LEVEL: debug" && \
 	echo "  DISCORD_TOKEN: $${DISCORD_TOKEN:0:20}... (worker doesn't need this)" && \
 	echo "🚀 Starting worker service..." && \
-	DATABASE_URL="postgresql://dev:devpass@localhost:5432/knockfm" \
+	DATABASE_URL="postgresql://dev:devpass@localhost:5432/knockfm?sslmode=disable" \
 	REDIS_URL="redis://localhost:6379" \
 	LOG_LEVEL="debug" \
 	go run cmd/worker/main.go
@@ -55,13 +55,13 @@ dev-api: ## Run API server in development mode
 	@if [ -f .env ]; then echo "✅ Found .env file"; else echo "⚠️  No .env file found"; fi
 	@source .env 2>/dev/null || true && \
 	echo "🔑 Environment variables:" && \
-	echo "  DATABASE_URL: postgresql://dev:devpass@localhost:5432/knockfm" && \
+	echo "  DATABASE_URL: postgresql://dev:devpass@localhost:5432/knockfm?sslmode=disable" && \
 	echo "  REDIS_URL: redis://localhost:6379" && \
 	echo "  LOG_LEVEL: debug" && \
 	echo "  PORT: 8080" && \
 	echo "  DISCORD_TOKEN: $${DISCORD_TOKEN:0:20}... (API doesn't need this)" && \
 	echo "🚀 Starting API service..." && \
-	DATABASE_URL="postgresql://dev:devpass@localhost:5432/knockfm" \
+	DATABASE_URL="postgresql://dev:devpass@localhost:5432/knockfm?sslmode=disable" \
 	REDIS_URL="redis://localhost:6379" \
 	LOG_LEVEL="debug" \
 	PORT="8080" \

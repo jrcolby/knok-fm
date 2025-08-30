@@ -29,8 +29,8 @@ func NewKnokRepository(db *sql.DB, logger *slog.Logger) *KnokRepository {
 // GetByID retrieves a knok by its UUID
 func (r *KnokRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Knok, error) {
 	query := `
-		SELECT id, server_id, url, platform, title, duration,
-		       thumbnail_url, discord_message_id, discord_channel_id,
+		SELECT id, server_id, url, platform, title,
+		       discord_message_id, discord_channel_id,
 		       message_content, metadata, extraction_status, posted_at,
 		       created_at, updated_at
 		FROM knoks
@@ -39,8 +39,8 @@ func (r *KnokRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Kno
 	row := r.db.QueryRowContext(ctx, query, id)
 
 	knok := &domain.Knok{}
-	var title, messageContent, thumbnailURL sql.NullString
-	var duration sql.NullInt32
+	var title, messageContent sql.NullString
+	// var duration sql.NullInt32
 	var updatedAt sql.NullTime
 	var metadataBytes []byte // Use []byte for JSONB column
 
@@ -50,8 +50,8 @@ func (r *KnokRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Kno
 		&knok.URL,
 		&knok.Platform,
 		&title,
-		&duration,
-		&thumbnailURL,
+		// &duration,
+		// &thumbnailURL,
 		&knok.DiscordMessageID,
 		&knok.DiscordChannelID,
 		&messageContent,
@@ -78,16 +78,16 @@ func (r *KnokRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Kno
 	if title.Valid {
 		knok.Title = &title.String
 	}
-	if duration.Valid {
-		durationInt := int(duration.Int32)
-		knok.Duration = &durationInt
-	}
+	// if duration.Valid {
+	// 	durationInt := int(duration.Int32)
+	// 	knok.Duration = &durationInt
+	// }
 	if messageContent.Valid {
 		knok.MessageContent = &messageContent.String
 	}
-	if thumbnailURL.Valid {
-		knok.ThumbnailURL = &thumbnailURL.String
-	}
+	// if thumbnailURL.Valid {
+	// 	knok.ThumbnailURL = &thumbnailURL.String
+	// }
 	if updatedAt.Valid {
 		knok.UpdatedAt = &updatedAt.Time
 	}
@@ -128,8 +128,8 @@ func (r *KnokRepository) GetByServerID(ctx context.Context, serverID string, off
 // GetByDiscordMessage retrieves a knok by Discord message ID
 func (r *KnokRepository) GetByDiscordMessage(ctx context.Context, messageID string) (*domain.Knok, error) {
 	query := `
-		SELECT id, server_id, url, platform, title, duration,
-		       thumbnail_url, discord_message_id, discord_channel_id,
+		SELECT id, server_id, url, platform, title,
+		       discord_message_id, discord_channel_id,
 		       message_content, metadata, extraction_status, posted_at,
 		       created_at, updated_at
 		FROM knoks
@@ -138,8 +138,7 @@ func (r *KnokRepository) GetByDiscordMessage(ctx context.Context, messageID stri
 	row := r.db.QueryRowContext(ctx, query, messageID)
 
 	knok := &domain.Knok{}
-	var title, messageContent, thumbnailURL sql.NullString
-	var duration sql.NullInt32
+	var title, messageContent sql.NullString
 	var updatedAt sql.NullTime
 	var metadataBytes []byte // Use []byte for JSONB column
 
@@ -149,8 +148,6 @@ func (r *KnokRepository) GetByDiscordMessage(ctx context.Context, messageID stri
 		&knok.URL,
 		&knok.Platform,
 		&title,
-		&duration,
-		&thumbnailURL,
 		&knok.DiscordMessageID,
 		&knok.DiscordChannelID,
 		&messageContent,
@@ -177,16 +174,16 @@ func (r *KnokRepository) GetByDiscordMessage(ctx context.Context, messageID stri
 	if title.Valid {
 		knok.Title = &title.String
 	}
-	if duration.Valid {
-		durationInt := int(duration.Int32)
-		knok.Duration = &durationInt
-	}
+	// if duration.Valid {
+	// 	durationInt := int(duration.Int32)
+	// 	knok.Duration = &durationInt
+	// }
 	if messageContent.Valid {
 		knok.MessageContent = &messageContent.String
 	}
-	if thumbnailURL.Valid {
-		knok.ThumbnailURL = &thumbnailURL.String
-	}
+	// if thumbnailURL.Valid {
+	// 	knok.ThumbnailURL = &thumbnailURL.String
+	// }
 	if updatedAt.Valid {
 		knok.UpdatedAt = &updatedAt.Time
 	}
@@ -228,35 +225,45 @@ func (r *KnokRepository) Search(ctx context.Context, serverID, query string, lim
 func (r *KnokRepository) Create(ctx context.Context, knok *domain.Knok) error {
 	query := `
 		INSERT INTO knoks (
-			id, server_id, url, platform, title, duration,
-			thumbnail_url, discord_message_id, discord_channel_id,
+			id, server_id, url, platform, title,
+			discord_message_id, discord_channel_id,
 			message_content, metadata, extraction_status, posted_at,
 			created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
 		)`
 
 	// Handle nullable fields
-	var title, messageContent, thumbnailURL interface{}
-	var duration interface{}
+	var title, messageContent interface{}
 
 	if knok.Title != nil {
 		title = *knok.Title
 	}
-	if knok.Duration != nil {
-		duration = *knok.Duration
-	}
+	// if knok.Duration != nil {
+	// 	duration = *knok.Duration
+	// }
 	if knok.MessageContent != nil {
 		messageContent = *knok.MessageContent
 	}
-	if knok.ThumbnailURL != nil {
-		thumbnailURL = *knok.ThumbnailURL
-	}
+	// if knok.ThumbnailURL != nil {
+	// 	thumbnailURL = *knok.ThumbnailURL
+	// }
 
 	// Convert metadata to JSON
 	metadata := knok.Metadata
 	if metadata == nil {
 		metadata = make(map[string]interface{})
+	}
+
+	// Convert metadata map to JSON for JSONB column
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		r.logger.Error("Failed to marshal knok metadata",
+			"error", err,
+			"knok_id", knok.ID,
+			"metadata", metadata,
+		)
+		return fmt.Errorf("failed to marshal knok metadata: %w", err)
 	}
 
 	// Set updated_at to same as created_at for new records
@@ -265,18 +272,18 @@ func (r *KnokRepository) Create(ctx context.Context, knok *domain.Knok) error {
 		updatedAt = *knok.UpdatedAt
 	}
 
-	_, err := r.db.ExecContext(ctx, query,
+	_, err = r.db.ExecContext(ctx, query,
 		knok.ID,
 		knok.ServerID,
 		knok.URL,
 		knok.Platform,
 		title,
-		duration,
-		thumbnailURL,
+		// duration,
+		// thumbnailURL,
 		knok.DiscordMessageID,
 		knok.DiscordChannelID,
 		messageContent,
-		metadata,
+		metadataJSON,
 		knok.ExtractionStatus,
 		knok.PostedAt,
 		knok.CreatedAt,
@@ -310,33 +317,30 @@ func (r *KnokRepository) Update(ctx context.Context, knok *domain.Knok) error {
 			url = $3,
 			platform = $4,
 			title = $5,
-			duration = $6,
-			thumbnail_url = $7,
-			discord_message_id = $8,
-			discord_channel_id = $9,
-			message_content = $10,
-			metadata = $11,
-			extraction_status = $12,
-			posted_at = $13,
-			updated_at = $14
+			discord_message_id = $6,
+			discord_channel_id = $7,
+			message_content = $8,
+			metadata = $9,
+			extraction_status = $10,
+			posted_at = $11,
+			updated_at = $12
 		WHERE id = $1`
 
 	// Handle nullable fields
-	var title, messageContent, thumbnailURL interface{}
-	var duration interface{}
+	var title, messageContent interface{}
 
 	if knok.Title != nil {
 		title = *knok.Title
 	}
-	if knok.Duration != nil {
-		duration = *knok.Duration
-	}
+	// if knok.Duration != nil {
+	// 	duration = *knok.Duration
+	// }
 	if knok.MessageContent != nil {
 		messageContent = *knok.MessageContent
 	}
-	if knok.ThumbnailURL != nil {
-		thumbnailURL = *knok.ThumbnailURL
-	}
+	// if knok.ThumbnailURL != nil {
+	// 	thumbnailURL = *knok.ThumbnailURL
+	// }
 
 	// Convert metadata to JSON
 	metadata := knok.Metadata
@@ -344,22 +348,33 @@ func (r *KnokRepository) Update(ctx context.Context, knok *domain.Knok) error {
 		metadata = make(map[string]interface{})
 	}
 
+	// Convert metadata map to JSON for JSONB column
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		r.logger.Error("Failed to marshal knok metadata",
+			"error", err,
+			"knok_id", knok.ID,
+			"metadata", metadata,
+		)
+		return fmt.Errorf("failed to marshal knok metadata: %w", err)
+	}
+
 	// Set updated_at to current time
 	now := time.Now()
 	knok.UpdatedAt = &now
 
-	_, err := r.db.ExecContext(ctx, query,
+	_, err = r.db.ExecContext(ctx, query,
 		knok.ID,
 		knok.ServerID,
 		knok.URL,
 		knok.Platform,
 		title,
-		duration,
-		thumbnailURL,
+		// duration,
+		// thumbnailURL,
 		knok.DiscordMessageID,
 		knok.DiscordChannelID,
 		messageContent,
-		metadata,
+		metadataJSON,
 		knok.ExtractionStatus,
 		knok.PostedAt,
 		knok.UpdatedAt,
@@ -392,8 +407,8 @@ func (r *KnokRepository) Delete(ctx context.Context, id uuid.UUID) error {
 // GetByURL finds knoks by URL within a server (for duplicate detection)
 func (r *KnokRepository) GetByURL(ctx context.Context, serverID, url string) (*domain.Knok, error) {
 	query := `
-		SELECT id, server_id, url, platform, title, duration,
-		       thumbnail_url, discord_message_id, discord_channel_id,
+		SELECT id, server_id, url, platform, title,
+		       discord_message_id, discord_channel_id,
 		       message_content, metadata, extraction_status, posted_at,
 		       created_at, updated_at
 		FROM knoks
@@ -404,8 +419,7 @@ func (r *KnokRepository) GetByURL(ctx context.Context, serverID, url string) (*d
 	row := r.db.QueryRowContext(ctx, query, serverID, url)
 
 	knok := &domain.Knok{}
-	var title, messageContent, thumbnailURL sql.NullString
-	var duration sql.NullInt32
+	var title, messageContent sql.NullString
 	var updatedAt sql.NullTime
 	var metadataBytes []byte // Use []byte for JSONB column
 
@@ -415,8 +429,8 @@ func (r *KnokRepository) GetByURL(ctx context.Context, serverID, url string) (*d
 		&knok.URL,
 		&knok.Platform,
 		&title,
-		&duration,
-		&thumbnailURL,
+		// &duration,
+		// &thumbnailURL,
 		&knok.DiscordMessageID,
 		&knok.DiscordChannelID,
 		&messageContent,
@@ -447,16 +461,16 @@ func (r *KnokRepository) GetByURL(ctx context.Context, serverID, url string) (*d
 	if title.Valid {
 		knok.Title = &title.String
 	}
-	if duration.Valid {
-		dur := int(duration.Int32)
-		knok.Duration = &dur
-	}
+	// if duration.Valid {
+	// 	dur := int(duration.Int32)
+	// 	knok.Duration = &dur
+	// }
 	if messageContent.Valid {
 		knok.MessageContent = &messageContent.String
 	}
-	if thumbnailURL.Valid {
-		knok.ThumbnailURL = &thumbnailURL.String
-	}
+	// if thumbnailURL.Valid {
+	// 	knok.ThumbnailURL = &thumbnailURL.String
+	// }
 	if updatedAt.Valid {
 		knok.UpdatedAt = &updatedAt.Time
 	}

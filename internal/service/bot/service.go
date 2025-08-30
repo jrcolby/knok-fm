@@ -46,6 +46,10 @@ func New(
 		ctx:        ctx,
 		cancel:     cancel,
 	}
+	
+	logger.Debug("BOT_SERVICE_CREATED: New bot service instance created", 
+		"bot_service_ptr", fmt.Sprintf("%p", botService),
+	)
 
 	// Create Discord session
 	session, err := discordgo.New("Bot " + config.DiscordToken)
@@ -97,10 +101,16 @@ func (s *BotService) Stop() error {
 }
 
 func (s *BotService) registerHandlers() {
+	s.logger.Debug("REGISTER_HANDLERS: Registering Discord handlers",
+		"bot_service_ptr", fmt.Sprintf("%p", s),
+		"session_ptr", fmt.Sprintf("%p", s.session),
+	)
+	
 	s.session.AddHandler(s.onReady)
 	s.session.AddHandler(s.onMessageCreate)
 	s.session.AddHandler(s.onInteractionCreate)
-
+	
+	s.logger.Debug("REGISTER_HANDLERS: All handlers registered successfully")
 }
 
 // onReady is called when the bot successfully connects to Discord
@@ -110,12 +120,18 @@ func (s *BotService) onReady(session *discordgo.Session, ready *discordgo.Ready)
 		"discriminator", ready.User.Discriminator,
 		"guilds", len(ready.Guilds),
 	)
+	
+	s.logger.Debug("ON_READY: Ready event fired",
+		"bot_service_ptr", fmt.Sprintf("%p", s),
+		"session_ptr", fmt.Sprintf("%p", session),
+		"user_id", ready.User.ID,
+	)
 
 	// Register commands now that bot is connected
 	if err := s.registerCommands(); err != nil {
 		s.logger.Error("Failed to register slash commands", "error", err)
 	} else {
-		s.logger.Info("Slash commands registered successfully")
+		s.logger.Info("Slash commands registered successfully from service.go")
 	}
 
 	// Set bot status

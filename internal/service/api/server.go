@@ -39,9 +39,6 @@ func New(
 		serverRepo: serverRepo,
 	}
 
-	// Setup routes
-	apiService.setupRoutes()
-
 	// Create HTTP server
 	apiService.server = &http.Server{
 		Addr:         ":" + config.Port,
@@ -50,6 +47,9 @@ func New(
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
+
+	// Setup routes
+	apiService.setupRoutes()
 
 	return apiService, nil
 }

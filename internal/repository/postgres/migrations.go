@@ -18,8 +18,9 @@ type Migration struct {
 var migrations = []Migration{
 	{
 		Version: 1,
-		Name:    "create_servers_table",
+		Name:    "initial_schema",
 		SQL: `
+			-- Create servers table
 			CREATE TABLE IF NOT EXISTS servers (
 				id VARCHAR(20) PRIMARY KEY,
 				name VARCHAR(255) NOT NULL,
@@ -31,34 +32,39 @@ var migrations = []Migration{
 
 			CREATE INDEX IF NOT EXISTS idx_servers_channel
 			ON servers(configured_channel_id);
-		`,
-	},
-	{
-		Version: 2,
-		Name:    "create_knoks_table",
-		SQL: `
+
+			-- Create knoks table (slimmed down, no duration/thumbnail_url columns)
 			CREATE TABLE IF NOT EXISTS knoks (
 				id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 				server_id VARCHAR(20) NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
 				url TEXT NOT NULL,
 				platform VARCHAR(50) NOT NULL,
 				title VARCHAR(500),
-				duration INTEGER,
-				thumbnail_url TEXT,
+				
+				-- Discord-specific fields
 				discord_message_id VARCHAR(20) NOT NULL,
 				discord_channel_id VARCHAR(20) NOT NULL,
 				message_content TEXT,
+				
+				-- Metadata and processing
 				metadata JSONB DEFAULT '{}',
 				extraction_status VARCHAR(20) DEFAULT 'pending',
+				
+				-- Timestamps
 				posted_at TIMESTAMP WITH TIME ZONE NOT NULL,
 				created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 				updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+				
+				-- Search vector for full-text search
+				search_vector tsvector,
 
+				-- Constraints
 				UNIQUE(discord_message_id, url),
 				CHECK (platform IN ('youtube', 'soundcloud', 'mixcloud', 'bandcamp', 'spotify', 'apple_music')),
 				CHECK (extraction_status IN ('pending', 'processing', 'complete', 'failed'))
 			);
 
+			-- Create indexes
 			CREATE INDEX IF NOT EXISTS idx_knoks_server_posted
 			ON knoks(server_id, posted_at DESC);
 
@@ -70,24 +76,11 @@ var migrations = []Migration{
 
 			CREATE INDEX IF NOT EXISTS idx_knoks_message
 			ON knoks(discord_message_id);
-		`,
-	},
-	{
-		Version: 3,
-		Name:    "add_fulltext_search",
-		SQL: `
-			-- Add search vector column
-			ALTER TABLE knoks ADD COLUMN IF NOT EXISTS search_vector tsvector;
-
-			-- Update existing records
-			UPDATE knoks SET search_vector = to_tsvector('english',
-				coalesce(title,''));
-
-			-- Create index
+			
 			CREATE INDEX IF NOT EXISTS idx_knoks_search
 			ON knoks USING GIN(search_vector);
 
-			-- Create trigger for automatic updates
+			-- Create search vector update function
 			CREATE OR REPLACE FUNCTION update_knoks_search_vector()
 			RETURNS trigger AS $$
 			BEGIN
@@ -97,7 +90,7 @@ var migrations = []Migration{
 			END;
 			$$ LANGUAGE plpgsql;
 
-			DROP TRIGGER IF EXISTS knoks_search_vector_update ON knoks;
+			-- Create trigger for automatic search vector updates
 			CREATE TRIGGER knoks_search_vector_update
 				BEFORE INSERT OR UPDATE ON knoks
 				FOR EACH ROW EXECUTE FUNCTION update_knoks_search_vector();
