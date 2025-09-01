@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -11,14 +12,11 @@ type KnokRepository interface {
 	// GetByID retrieves a knok by its UUID
 	GetByID(ctx context.Context, id uuid.UUID) (*Knok, error)
 
-	// GetByServerID retrieves knoks for a Discord server with pagination
-	GetByServerID(ctx context.Context, serverID string, offset, limit int) ([]*Knok, int, error)
-
 	// GetByDiscordMessage retrieves a knok by Discord message ID
 	GetByDiscordMessage(ctx context.Context, messageID string) (*Knok, error)
 
-	// Search performs full-text search on knoks within a server
-	Search(ctx context.Context, serverID, query string, limit int) ([]*Knok, error)
+	// Search performs full-text search on knoks within a server with cursor pagination
+	Search(ctx context.Context, serverID, query string, cursor *time.Time, limit int) ([]*Knok, error)
 
 	// Create inserts a new knok
 	Create(ctx context.Context, knok *Knok) error
@@ -32,8 +30,8 @@ type KnokRepository interface {
 	// GetByURL finds knoks by URL within a server (for duplicate detection)
 	GetByURL(ctx context.Context, serverID, url string) (*Knok, error)
 
-	// GetRecentByServer gets the most recent knoks for a server
-	GetRecentByServer(ctx context.Context, serverID string, limit int) ([]*Knok, error)
+	// GetRecentByServer gets the most recent knoks for a server with cursor pagination
+	GetRecentByServer(ctx context.Context, serverID string, cursor *time.Time, limit int) ([]*Knok, error)
 
 	// GetByPlatform gets knoks filtered by platform within a server
 	GetByPlatform(ctx context.Context, serverID, platform string, offset, limit int) ([]*Knok, int, error)

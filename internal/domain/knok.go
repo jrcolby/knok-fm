@@ -11,8 +11,8 @@ type Knok struct {
 	ID       uuid.UUID `json:"id" db:"id"`
 	ServerID string    `json:"server_id" db:"server_id"`
 	URL      string    `json:"url" db:"url"`
-	Platform string  `json:"platform" db:"platform"`
-	Title    *string `json:"title" db:"title"`
+	Platform string    `json:"platform" db:"platform"`
+	Title    *string   `json:"title" db:"title"`
 
 	// Discord-specific fields
 	DiscordMessageID string  `json:"discord_message_id" db:"discord_message_id"`
@@ -59,4 +59,3 @@ func (k *Knok) IsValidPlatform() bool {
 	}
 	return validPlatforms[k.Platform]
 }
-

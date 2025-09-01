@@ -46,8 +46,8 @@ func New(
 		ctx:        ctx,
 		cancel:     cancel,
 	}
-	
-	logger.Debug("BOT_SERVICE_CREATED: New bot service instance created", 
+
+	logger.Debug("BOT_SERVICE_CREATED: New bot service instance created",
 		"bot_service_ptr", fmt.Sprintf("%p", botService),
 	)
 
@@ -105,11 +105,11 @@ func (s *BotService) registerHandlers() {
 		"bot_service_ptr", fmt.Sprintf("%p", s),
 		"session_ptr", fmt.Sprintf("%p", s.session),
 	)
-	
+
 	s.session.AddHandler(s.onReady)
 	s.session.AddHandler(s.onMessageCreate)
 	s.session.AddHandler(s.onInteractionCreate)
-	
+
 	s.logger.Debug("REGISTER_HANDLERS: All handlers registered successfully")
 }
 
@@ -120,7 +120,7 @@ func (s *BotService) onReady(session *discordgo.Session, ready *discordgo.Ready)
 		"discriminator", ready.User.Discriminator,
 		"guilds", len(ready.Guilds),
 	)
-	
+
 	s.logger.Debug("ON_READY: Ready event fired",
 		"bot_service_ptr", fmt.Sprintf("%p", s),
 		"session_ptr", fmt.Sprintf("%p", session),

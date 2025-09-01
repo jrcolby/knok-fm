@@ -21,6 +21,7 @@ var urlPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)(?:https?://)?[\w-]+\.bandcamp\.com/track/[\w-]+`),
 	regexp.MustCompile(`(?i)(?:https?://)?(open\.)?spotify\.com/(track|album|playlist)/[\w]+`),
 	regexp.MustCompile(`(?i)(?:https?://)?music\.apple\.com/[a-z]{2}/(album|playlist)/[\w-]+`),
+	regexp.MustCompile(`(?i)(?:https?://)?(?:www\.)?nts\.live/shows/[\w-]+/episodes/[\w-]+`),
 }
 
 // URLInfo contains information about a detected URL
@@ -33,7 +34,7 @@ type URLInfo struct {
 func (s *BotService) onMessageCreate(session *discordgo.Session, message *discordgo.MessageCreate) {
 	// DEBUG: Add unique handler invocation ID to trace duplicates
 	handlerID := fmt.Sprintf("%p-%d", s, message.Timestamp.UnixNano())
-	
+
 	// ALWAYS log this at INFO level to catch both invocations
 	s.logger.Info("🚨 HANDLER_INVOCATION: onMessageCreate called",
 		"handler_id", handlerID,
@@ -42,7 +43,7 @@ func (s *BotService) onMessageCreate(session *discordgo.Session, message *discor
 		"session_ptr", fmt.Sprintf("%p", session),
 		"timestamp", message.Timestamp.UnixNano(),
 	)
-	
+
 	// Ignore bot messages
 	if message.Author.Bot {
 		s.logger.Debug("HANDLER_EXIT: Ignoring bot message", "handler_id", handlerID)
@@ -53,11 +54,11 @@ func (s *BotService) onMessageCreate(session *discordgo.Session, message *discor
 	urls := s.extractURLs(message.Content)
 	if len(urls) == 0 {
 		s.logger.Debug("HANDLER_EXIT: No URLs found",
-		 "handler_id", handlerID)
+			"handler_id", handlerID)
 		return
 	}
-	
-	s.logger.Debug("EXTRACTED_URLS: Found URLs", 
+
+	s.logger.Debug("EXTRACTED_URLS: Found URLs",
 		"handler_id", handlerID,
 		"url_count", len(urls),
 		"urls", urls,
@@ -79,7 +80,7 @@ func (s *BotService) onMessageCreate(session *discordgo.Session, message *discor
 			"url", urlInfo.URL,
 			"platform", urlInfo.Platform,
 		)
-		
+
 		if err := s.processDetectedURL(message, urlInfo); err != nil {
 			s.logger.Error("Failed to process URL",
 				"error", err,
@@ -97,8 +98,8 @@ func (s *BotService) onMessageCreate(session *discordgo.Session, message *discor
 			"guild_id", message.GuildID,
 			"knoks_created", knoksCreated,
 		)
-		
-		s.logger.Debug("HANDLER_EXIT: Processing completed successfully", 
+
+		s.logger.Debug("HANDLER_EXIT: Processing completed successfully",
 			"handler_id", handlerID,
 			"knoks_created", knoksCreated,
 		)

@@ -80,10 +80,10 @@ func (p *JobProcessor) ProcessMetadataExtraction(ctx context.Context, payload ma
 
 	// Create metadata with extracted title
 	metadata := map[string]interface{}{
-		"title":         title,
+		"title": title,
 		// "duration":      nil, // Duration extraction not implemented yet
 		// "thumbnail_url": nil, // Thumbnail extraction not implemented yet
-		"extracted_at":  time.Now().Unix(),
+		"extracted_at": time.Now().Unix(),
 	}
 
 	// Update knok with extracted metadata (if knok repo is available)

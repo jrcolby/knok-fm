@@ -114,17 +114,6 @@ func (r *KnokRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Kno
 	return knok, nil
 }
 
-// GetByServerID retrieves knoks for a Discord server with pagination
-func (r *KnokRepository) GetByServerID(ctx context.Context, serverID string, offset, limit int) ([]*domain.Knok, int, error) {
-	r.logger.Info("GetByServerID called (not implemented yet)",
-		"server_id", serverID,
-		"offset", offset,
-		"limit", limit,
-	)
-	// TODO: Implement actual PostgreSQL query
-	return nil, 0, nil
-}
-
 // GetByDiscordMessage retrieves a knok by Discord message ID
 func (r *KnokRepository) GetByDiscordMessage(ctx context.Context, messageID string) (*domain.Knok, error) {
 	query := `
@@ -210,15 +199,119 @@ func (r *KnokRepository) GetByDiscordMessage(ctx context.Context, messageID stri
 	return knok, nil
 }
 
-// Search performs full-text search on knoks within a server
-func (r *KnokRepository) Search(ctx context.Context, serverID, query string, limit int) ([]*domain.Knok, error) {
-	r.logger.Info("Search called (not implemented yet)",
+// Search performs full-text search on knoks within a server with cursor pagination
+func (r *KnokRepository) Search(ctx context.Context, serverID, searchQuery string, cursor *time.Time, limit int) ([]*domain.Knok, error) {
+	r.logger.Info("Search called",
 		"server_id", serverID,
-		"query", query,
+		"query", searchQuery,
+		"cursor", cursor,
 		"limit", limit,
 	)
-	// TODO: Implement actual PostgreSQL query
-	return nil, nil
+
+	var query string
+	var args []interface{}
+
+	if cursor == nil {
+		// No cursor, search most recent matches
+		query = `
+			SELECT id, server_id, url, platform, title,
+					discord_message_id, discord_channel_id,
+					message_content, metadata, extraction_status, posted_at,
+					created_at, updated_at
+			FROM knoks
+			WHERE server_id = $1 AND search_vector @@ plainto_tsquery('english', $2)
+			ORDER BY posted_at DESC
+			LIMIT $3`
+		args = []interface{}{serverID, searchQuery, limit}
+	} else {
+		// With cursor, search matches older than cursor
+		query = `
+			SELECT id, server_id, url, platform, title,
+					discord_message_id, discord_channel_id,
+					message_content, metadata, extraction_status, posted_at,
+					created_at, updated_at
+			FROM knoks
+			WHERE server_id = $1 AND search_vector @@ plainto_tsquery('english', $2) AND posted_at < $3
+			ORDER BY posted_at DESC
+			LIMIT $4`
+		args = []interface{}{serverID, searchQuery, *cursor, limit}
+	}
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		r.logger.Error("Failed to search knoks",
+			"error", err,
+			"server_id", serverID,
+			"query", searchQuery,
+		)
+		return nil, fmt.Errorf("failed to search knoks: %w", err)
+	}
+	defer rows.Close()
+
+	var knoks []*domain.Knok
+	for rows.Next() {
+		knok := &domain.Knok{}
+		var title, messageContent sql.NullString
+		var updatedAt sql.NullTime
+		var metadataBytes []byte
+
+		if err := rows.Scan(
+			&knok.ID,
+			&knok.ServerID,
+			&knok.URL,
+			&knok.Platform,
+			&title,
+			&knok.DiscordMessageID,
+			&knok.DiscordChannelID,
+			&messageContent,
+			&metadataBytes,
+			&knok.ExtractionStatus,
+			&knok.PostedAt,
+			&knok.CreatedAt,
+			&updatedAt,
+		); err != nil {
+			r.logger.Error("Failed to scan search result", "error", err)
+			return nil, fmt.Errorf("failed to scan search result: %w", err)
+		}
+
+		if title.Valid {
+			knok.Title = &title.String
+		}
+		if messageContent.Valid {
+			knok.MessageContent = &messageContent.String
+		}
+		if updatedAt.Valid {
+			knok.UpdatedAt = &updatedAt.Time
+		}
+
+		// Convert JSONB bytes to map[string]interface{}
+		if len(metadataBytes) > 0 {
+			var metadata map[string]interface{}
+			if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
+				r.logger.Warn("Failed to unmarshal knok metadata", "error", err)
+				knok.Metadata = make(map[string]interface{})
+			} else {
+				knok.Metadata = metadata
+			}
+		} else {
+			knok.Metadata = make(map[string]interface{})
+		}
+
+		knoks = append(knoks, knok)
+	}
+
+	if err := rows.Err(); err != nil {
+		r.logger.Error("Error occurred during search iteration", "error", err)
+		return nil, fmt.Errorf("error occurred during search iteration: %w", err)
+	}
+
+	r.logger.Debug("Search completed successfully",
+		"server_id", serverID,
+		"query", searchQuery,
+		"results_count", len(knoks),
+	)
+
+	return knoks, nil
 }
 
 // Create inserts a new knok
@@ -239,15 +332,10 @@ func (r *KnokRepository) Create(ctx context.Context, knok *domain.Knok) error {
 	if knok.Title != nil {
 		title = *knok.Title
 	}
-	// if knok.Duration != nil {
-	// 	duration = *knok.Duration
-	// }
+
 	if knok.MessageContent != nil {
 		messageContent = *knok.MessageContent
 	}
-	// if knok.ThumbnailURL != nil {
-	// 	thumbnailURL = *knok.ThumbnailURL
-	// }
 
 	// Convert metadata to JSON
 	metadata := knok.Metadata
@@ -278,8 +366,6 @@ func (r *KnokRepository) Create(ctx context.Context, knok *domain.Knok) error {
 		knok.URL,
 		knok.Platform,
 		title,
-		// duration,
-		// thumbnailURL,
 		knok.DiscordMessageID,
 		knok.DiscordChannelID,
 		messageContent,
@@ -332,15 +418,10 @@ func (r *KnokRepository) Update(ctx context.Context, knok *domain.Knok) error {
 	if knok.Title != nil {
 		title = *knok.Title
 	}
-	// if knok.Duration != nil {
-	// 	duration = *knok.Duration
-	// }
+
 	if knok.MessageContent != nil {
 		messageContent = *knok.MessageContent
 	}
-	// if knok.ThumbnailURL != nil {
-	// 	thumbnailURL = *knok.ThumbnailURL
-	// }
 
 	// Convert metadata to JSON
 	metadata := knok.Metadata
@@ -369,8 +450,6 @@ func (r *KnokRepository) Update(ctx context.Context, knok *domain.Knok) error {
 		knok.URL,
 		knok.Platform,
 		title,
-		// duration,
-		// thumbnailURL,
 		knok.DiscordMessageID,
 		knok.DiscordChannelID,
 		messageContent,
@@ -429,8 +508,6 @@ func (r *KnokRepository) GetByURL(ctx context.Context, serverID, url string) (*d
 		&knok.URL,
 		&knok.Platform,
 		&title,
-		// &duration,
-		// &thumbnailURL,
 		&knok.DiscordMessageID,
 		&knok.DiscordChannelID,
 		&messageContent,
@@ -461,16 +538,9 @@ func (r *KnokRepository) GetByURL(ctx context.Context, serverID, url string) (*d
 	if title.Valid {
 		knok.Title = &title.String
 	}
-	// if duration.Valid {
-	// 	dur := int(duration.Int32)
-	// 	knok.Duration = &dur
-	// }
 	if messageContent.Valid {
 		knok.MessageContent = &messageContent.String
 	}
-	// if thumbnailURL.Valid {
-	// 	knok.ThumbnailURL = &thumbnailURL.String
-	// }
 	if updatedAt.Valid {
 		knok.UpdatedAt = &updatedAt.Time
 	}
@@ -503,14 +573,124 @@ func (r *KnokRepository) GetByURL(ctx context.Context, serverID, url string) (*d
 	return knok, nil
 }
 
-// GetRecentByServer gets the most recent knoks for a server
-func (r *KnokRepository) GetRecentByServer(ctx context.Context, serverID string, limit int) ([]*domain.Knok, error) {
-	r.logger.Info("GetRecentByServer called (not implemented yet)",
+// GetRecentByServer gets the most recent knoks for a server with cursor pagination
+func (r *KnokRepository) GetRecentByServer(ctx context.Context, serverID string, cursor *time.Time, limit int) ([]*domain.Knok, error) {
+	r.logger.Info("GetRecentByServer called",
 		"server_id", serverID,
+		"cursor", cursor,
 		"limit", limit,
 	)
-	// TODO: Implement actual PostgreSQL query
-	return nil, nil
+
+	var query string
+	var args []interface{}
+
+	if cursor == nil {
+		// No cursor, get the most recent knoks
+		query = `
+			SELECT id, server_id, url, platform, title,
+					discord_message_id, discord_channel_id,
+					message_content, metadata, extraction_status, posted_at,
+					created_at, updated_at
+			FROM knoks
+			WHERE server_id = $1
+			ORDER BY posted_at DESC
+			LIMIT $2`
+		args = []interface{}{serverID, limit}
+	} else {
+		// With cursor, get knoks older than the cursor
+		query = `
+			SELECT id, server_id, url, platform, title,
+					discord_message_id, discord_channel_id,
+					message_content, metadata, extraction_status, posted_at,
+					created_at, updated_at
+			FROM knoks
+			WHERE server_id = $1 AND posted_at < $2
+			ORDER BY posted_at DESC
+			LIMIT $3`
+		args = []interface{}{serverID, *cursor, limit}
+	}
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+
+	if err != nil {
+		r.logger.Error("Failed to query recent knoks",
+			"error", err,
+			"server_id", serverID,
+			"limit", limit,
+		)
+		return nil, fmt.Errorf("failed to query recent knoks: %w", err)
+	}
+
+	defer rows.Close()
+
+	var knoks []*domain.Knok
+	for rows.Next() {
+		knok := &domain.Knok{}
+		var title, messageContent sql.NullString
+		var updatedAt sql.NullTime
+		var metadataBytes []byte // Use []byte for JSONB column
+
+		if err := rows.Scan(
+			&knok.ID,
+			&knok.ServerID,
+			&knok.URL,
+			&knok.Platform,
+			&title,
+			&knok.DiscordMessageID,
+			&knok.DiscordChannelID,
+			&messageContent,
+			&metadataBytes,
+			&knok.ExtractionStatus,
+			&knok.PostedAt,
+			&knok.CreatedAt,
+			&updatedAt,
+		); err != nil {
+			r.logger.Error("Failed to scan knok",
+				"error", err,
+			)
+			return nil, fmt.Errorf("failed to scan knok: %w", err)
+		}
+		if title.Valid {
+			knok.Title = &title.String
+		}
+		if messageContent.Valid {
+			knok.MessageContent = &messageContent.String
+		}
+		if updatedAt.Valid {
+			knok.UpdatedAt = &updatedAt.Time
+		}
+
+		// Convert JSONB bytes to map[string]interface{}
+		if len(metadataBytes) > 0 {
+			var metadata map[string]interface{}
+			if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
+				r.logger.Warn("Failed to unmarshal knok metadata", "error", err)
+				knok.Metadata = make(map[string]interface{})
+			} else {
+				knok.Metadata = metadata
+			}
+		} else {
+			knok.Metadata = make(map[string]interface{})
+		}
+
+		knoks = append(knoks, knok)
+	}
+
+	if err := rows.Err(); err != nil {
+		r.logger.Error("Error occurred during rows iteration",
+			"error", err,
+		)
+		return nil, fmt.Errorf("error occurred during rows iteration: %w", err)
+	}
+
+	r.logger.Debug("Recent knoks retrieved successfully",
+		"server_id", serverID,
+		"limit", limit,
+		"knoks_count", len(knoks),
+	)
+
+	return knoks, nil
+
 }
 
 // GetByPlatform gets knoks filtered by platform within a server
