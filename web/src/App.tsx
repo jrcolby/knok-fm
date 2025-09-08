@@ -1,15 +1,12 @@
 import { Route, BrowserRouter as Router, Routes } from "react-router";
 import { KnokTimeline } from "./pages/KnokTimeline";
+import { Header } from "./components/Header";
 
 function App() {
   return (
     <Router>
-      <div className="min-h-screen bg-gray-100">
-        <header className="bg-white shadow">
-          <div className="max-w-7xl mx-auto py-6 px-4">
-            <h1 className="text-3xl font-bold text-gray-900">Knok FM</h1>
-          </div>
-        </header>
+      <div className="min-h-screen bg-neutral-800 text-white">
+        <Header />
         <main>
           <Routes>
             <Route path="/" element={<KnokTimeline />} />

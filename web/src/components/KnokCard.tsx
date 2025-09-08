@@ -18,17 +18,17 @@ export function KnokCard({ knok }: KnokCardProps) {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+    <div className="bg-stone-800 border border-stone-700 rounded-lg shadow-lg p-6 hover:shadow-xl hover:border-yellow-400/30 transition-all duration-200">
       <div className="flex items-start justify-between mb-3">
-        <h3 className="text-lg font-semibold text-gray-900 line-clamp-2">
+        <h3 className="text-lg font-semibold text-yellow-400 line-clamp-2">
           {knok.title}
         </h3>
-        <span className="text-sm text-gray-500 ml-4 whitespace-nowrap">
+        <span className="text-sm text-stone-400 ml-4 whitespace-nowrap">
           {getDomainFromUrl(knok.url)}
         </span>
       </div>
 
-      <div className="text-sm text-gray-600 mb-4">
+      <div className="text-sm text-stone-300 mb-4">
         Posted: {formatDate(knok.posted_at)}
       </div>
 
@@ -36,7 +36,7 @@ export function KnokCard({ knok }: KnokCardProps) {
         href={knok.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
+        className="inline-flex items-center px-4 py-2 bg-yellow-400 text-stone-900 text-sm font-medium rounded-md hover:bg-yellow-300 transition-colors"
       >
         Listen
         <svg

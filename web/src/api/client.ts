@@ -77,6 +77,16 @@ class ApiClient {
     return this.request<KnoksResponse>(endpoint);
   }
 
+  async searchKnoks(query: string, cursor?: string): Promise<KnoksResponse> {
+    const params = new URLSearchParams();
+    params.set("q", query);
+    if (cursor) params.set("cursor", cursor);
+    const queryString = params.toString();
+    const endpoint = `/api/v1/knoks/search${
+      queryString ? `?${queryString}` : ""
+    }`;
+    return this.request<KnoksResponse>(endpoint);
+  }
   async healthCheck(): Promise<{ status: string }> {
     return this.request<{ status: string }>("/health");
   }

@@ -12,16 +12,18 @@ import (
 	"github.com/google/uuid"
 )
 
-// URL patterns for different music platforms
+// URL patterns for different music platforms - simplified to host-based matching
 var urlPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)(?:https?://)?(?:www\.)?youtube\.com/watch\?v=[\w-]+`),
-	regexp.MustCompile(`(?i)(?:https?://)?(?:www\.)?youtu\.be/[\w-]+`),
-	regexp.MustCompile(`(?i)(?:https?://)?(?:www\.)?soundcloud\.com/[\w-]+/[\w-]+`),
-	regexp.MustCompile(`(?i)(?:https?://)?(?:www\.)?mixcloud\.com/[\w-]+/[\w-]+`),
-	regexp.MustCompile(`(?i)(?:https?://)?[\w-]+\.bandcamp\.com/track/[\w-]+`),
-	regexp.MustCompile(`(?i)(?:https?://)?(open\.)?spotify\.com/(track|album|playlist)/[\w]+`),
-	regexp.MustCompile(`(?i)(?:https?://)?music\.apple\.com/[a-z]{2}/(album|playlist)/[\w-]+`),
-	regexp.MustCompile(`(?i)(?:https?://)?(?:www\.)?nts\.live/shows/[\w-]+/episodes/[\w-]+`),
+	regexp.MustCompile(`(?i)(?:https?://)?(?:www\.)?youtube\.com`),
+	regexp.MustCompile(`(?i)(?:https?://)?(?:www\.)?youtu\.be`),
+	regexp.MustCompile(`(?i)(?:https?://)?(?:www\.)?soundcloud\.com`),
+	regexp.MustCompile(`(?i)(?:https?://)?(?:www\.)?mixcloud\.com`),
+	regexp.MustCompile(`(?i)(?:https?://)?[\w-]+\.bandcamp\.com`),
+	regexp.MustCompile(`(?i)(?:https?://)?(open\.)?spotify\.com`),
+	regexp.MustCompile(`(?i)(?:https?://)?music\.apple\.com`),
+	regexp.MustCompile(`(?i)(?:https?://)?(?:www\.)?nts\.live`),
+	regexp.MustCompile(`(?i)(?:https?://)?(?:www\.)?dublab\.com`),
+	regexp.MustCompile(`(?i)(?:https?://)?noodsradio\.com`),
 }
 
 // URLInfo contains information about a detected URL
@@ -298,22 +300,5 @@ func (s *BotService) extractURLs(content string) []URLInfo {
 
 // detectPlatform determines the platform from a URL
 func (s *BotService) detectPlatform(url string) string {
-	url = strings.ToLower(url)
-
-	switch {
-	case strings.Contains(url, "youtube.com") || strings.Contains(url, "youtu.be"):
-		return domain.PlatformYouTube
-	case strings.Contains(url, "soundcloud.com"):
-		return domain.PlatformSoundCloud
-	case strings.Contains(url, "mixcloud.com"):
-		return domain.PlatformMixcloud
-	case strings.Contains(url, "bandcamp.com"):
-		return domain.PlatformBandcamp
-	case strings.Contains(url, "spotify.com"):
-		return domain.PlatformSpotify
-	case strings.Contains(url, "apple.com"):
-		return domain.PlatformAppleMusic
-	default:
-		return "unknown"
-	}
+	return domain.DetectPlatformFromURL(url)
 }

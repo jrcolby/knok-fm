@@ -29,15 +29,7 @@ type Knok struct {
 	UpdatedAt *time.Time `json:"updated_at" db:"updated_at"`
 }
 
-// Platform constants
-const (
-	PlatformYouTube    = "youtube"
-	PlatformSoundCloud = "soundcloud"
-	PlatformMixcloud   = "mixcloud"
-	PlatformBandcamp   = "bandcamp"
-	PlatformSpotify    = "spotify"
-	PlatformAppleMusic = "apple_music"
-)
+// Platform constants moved to platforms.go
 
 // Extraction status constants
 const (
@@ -49,13 +41,5 @@ const (
 
 // IsValidPlatform checks if the platform is supported
 func (k *Knok) IsValidPlatform() bool {
-	validPlatforms := map[string]bool{
-		PlatformYouTube:    true,
-		PlatformSoundCloud: true,
-		PlatformMixcloud:   true,
-		PlatformBandcamp:   true,
-		PlatformSpotify:    true,
-		PlatformAppleMusic: true,
-	}
-	return validPlatforms[k.Platform]
+	return IsValidPlatform(k.Platform)
 }

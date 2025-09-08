@@ -25,22 +25,26 @@ export interface ServerDto {
 
 // Platform constants matching Go constants
 export const PLATFORMS = {
-  YOUTUBE: 'youtube',
-  SOUNDCLOUD: 'soundcloud',
-  MIXCLOUD: 'mixcloud',
-  BANDCAMP: 'bandcamp',
-  SPOTIFY: 'spotify',
-  APPLE_MUSIC: 'apple_music',
+  YOUTUBE: "youtube",
+  SOUNDCLOUD: "soundcloud",
+  MIXCLOUD: "mixcloud",
+  BANDCAMP: "bandcamp",
+  SPOTIFY: "spotify",
+  APPLE_MUSIC: "apple_music",
+  NTS: `nts`,
+  DUBLAB: `dublab`,
+  NOODS: `noods`,
 } as const;
 
-export type Platform = typeof PLATFORMS[keyof typeof PLATFORMS];
+export type Platform = (typeof PLATFORMS)[keyof typeof PLATFORMS];
 
 // Extraction status constants matching Go constants
 export const EXTRACTION_STATUS = {
-  PENDING: 'pending',
-  PROCESSING: 'processing',
-  COMPLETE: 'complete',
-  FAILED: 'failed',
+  PENDING: "pending",
+  PROCESSING: "processing",
+  COMPLETE: "complete",
+  FAILED: "failed",
 } as const;
 
-export type ExtractionStatus = typeof EXTRACTION_STATUS[keyof typeof EXTRACTION_STATUS];
+export type ExtractionStatus =
+  (typeof EXTRACTION_STATUS)[keyof typeof EXTRACTION_STATUS];

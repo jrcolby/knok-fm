@@ -42,9 +42,10 @@ func (r *Router) SetupRoutes() http.Handler {
 	// API v1 routes - Stats
 	r.mux.HandleFunc("GET /api/v1/stats", r.statsHandler.HandleStats)
 
-	// API v1 routes - Knoks returned by most recent for server
+	// API v1 routes - Get recent knoks, search knoks, all for one server
 	r.mux.HandleFunc("GET /api/v1/knoks/server/{serverId}", r.knoksHandler.GetKnoksByServer)
-
+	r.mux.HandleFunc("GET /api/v1/knoks/search", r.knoksHandler.SearchKnoks)
+	r.mux.HandleFunc("GET /api/v1/knoks/random", r.knoksHandler.GetRandomKnok)
 	// Add CORS middleware
 	return middleware.CORS(r.mux)
 }

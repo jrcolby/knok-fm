@@ -60,7 +60,7 @@ var migrations = []Migration{
 
 				-- Constraints
 				UNIQUE(discord_message_id, url),
-				CHECK (platform IN ('youtube', 'soundcloud', 'mixcloud', 'bandcamp', 'spotify', 'apple_music')),
+				CHECK (platform IN ('youtube', 'soundcloud', 'mixcloud', 'bandcamp', 'spotify', 'apple_music', 'nts', 'dublab', 'noods')),
 				CHECK (extraction_status IN ('pending', 'processing', 'complete', 'failed'))
 			);
 

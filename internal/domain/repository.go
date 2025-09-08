@@ -16,7 +16,10 @@ type KnokRepository interface {
 	GetByDiscordMessage(ctx context.Context, messageID string) (*Knok, error)
 
 	// Search performs full-text search on knoks within a server with cursor pagination
-	Search(ctx context.Context, serverID, query string, cursor *time.Time, limit int) ([]*Knok, error)
+	Search(ctx context.Context, query string, cursor *time.Time, limit int) ([]*Knok, error)
+
+	// Get random knok
+	GetRandom(ctx context.Context) (*Knok, error)
 
 	// Create inserts a new knok
 	Create(ctx context.Context, knok *Knok) error
