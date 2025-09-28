@@ -25,6 +25,7 @@ const (
 	PlatformNTS        = "nts"
 	PlatformDublab     = "dublab"
 	PlatformNoods      = "noods"
+	PlatformRinseFM    = "rinse_fm"
 )
 
 // GetPlatformConfig returns the centralized platform configuration
@@ -75,6 +76,11 @@ func GetPlatformConfig() PlatformConfig {
 				ID:          PlatformNoods,
 				Name:        "Noods Radio",
 				URLPatterns: []string{"noodsradio.com"},
+			},
+			PlatformRinseFM: {
+				ID:          PlatformRinseFM,
+				Name:        "Rinse FM",
+				URLPatterns: []string{"rinse.fm", "www.rinse.fm"},
 			},
 		},
 	}

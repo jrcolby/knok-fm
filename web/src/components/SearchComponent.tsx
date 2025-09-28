@@ -164,7 +164,7 @@ export function SearchComponent() {
           <div className="absolute top-4 left-4 right-4 bg-stone-900 rounded-lg border-b border-neutral-700">
             <div className="flex items-center gap-4 p-4">
               {/* Searchbar input container with relative to place icon */}
-              <div className="flex-1 relative">
+              <div className="flex-1 relative ">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 h-5 w-5" />
                 <input
                   ref={inputRef}
@@ -183,7 +183,7 @@ export function SearchComponent() {
               </div>
             </div>
             {/* Search results container with a max-height of 96 and overflow-y scrollbar if it overflows*/}
-            <div className="max-h-96 overflow-y auto">
+            <div className="max-h-96 bg-rose-900 rounded-lg overflow-flow-y">
               {/* // loader */}
               {isLoading && (
                 <div className="px-4 py-8 text-center text-neutral-400">
@@ -193,7 +193,7 @@ export function SearchComponent() {
               )}
               {!isLoading && knoks.length > 0 && (
                 // Search result container that is a div containing a button that also contains a span
-                <div className="py-2">
+                <div className="py-2 border-amber-700 border-2 overflow-y-auto">
                   {knoks.map((suggestion, index) => (
                     <button
                       key={index}

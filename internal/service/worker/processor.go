@@ -11,6 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/launcher"
+	"github.com/go-rod/rod/lib/proto"
 	"github.com/google/uuid"
 	"golang.org/x/net/html"
 )
@@ -71,30 +74,33 @@ func (p *JobProcessor) ProcessMetadataExtraction(ctx context.Context, payload ma
 		}
 	}
 
-	// Extract metadata from the URL
-	title, err := p.extractTitleFromURL(ctx, url)
+	// Extract metadata using three-tier strategy
+	extractedMetadata, extractionMethod, err := p.extractMetadataWithFallbacks(ctx, url)
 	if err != nil {
-		logger.Warn("Failed to extract title from URL", "error", err, "url", url)
-		title = "Unknown Title" // Fallback if extraction fails
+		logger.Error("Failed to extract metadata with fallbacks", "error", err, "url", url)
+		// Create minimal fallback metadata
+		extractedMetadata = map[string]string{
+			"title": "Unknown Title",
+		}
+		extractionMethod = "error_fallback"
 	}
 
-	// Extract all open graph metadata from HTML
-	opengraphMetadata, err := p.extractOgMetadata(ctx, url)
-	if err != nil {
-		logger.Warn("Failed to extract opengraph metadata from URL", "error", err, "url", url)
-		opengraphMetadata = make(map[string]string) // Ensure it's not nil
-	}
-
-	// Create metadata with extracted title and flattened Open Graph data
+	// Create metadata with extracted data and extraction method info
 	metadata := map[string]interface{}{
-		"title":        title,
-		"description":  opengraphMetadata["description"],
-		"image":        opengraphMetadata["image"],
-		"site_name":    opengraphMetadata["site_name"],
-		"extracted_at": time.Now().Unix(),
+		"title":             extractedMetadata["title"],
+		"description":       extractedMetadata["description"],
+		"image":             extractedMetadata["image"],
+		"site_name":         extractedMetadata["site_name"],
+		"extraction_method": extractionMethod,
+		"extracted_at":      time.Now().Unix(),
 	}
 
-	p.logger.Info("map has", "title", title, "description", metadata["description"], "image", metadata["image"], "site_name", metadata["site_name"])
+	p.logger.Info("Metadata extraction completed",
+		"extraction_method", extractionMethod,
+		"title", metadata["title"],
+		"description", metadata["description"],
+		"image", metadata["image"],
+		"site_name", metadata["site_name"])
 
 	// Update knok with extracted metadata (if knok repo is available)
 	if p.knokRepo != nil {
@@ -103,16 +109,19 @@ func (p *JobProcessor) ProcessMetadataExtraction(ctx context.Context, payload ma
 			return fmt.Errorf("failed to get knok for update: %w", err)
 		}
 
-		// Update knok fields with extracted metadata
+		// Update knok title with extracted metadata
 		if title, ok := metadata["title"].(string); ok {
 			knok.Title = &title
 		}
 
 		// Update metadata field
 		knok.Metadata = map[string]interface{}{
-			"extraction_method": "worker_processor",
+			"extraction_method": extractionMethod,
 			"extraction_time":   time.Now().Unix(),
-			"raw_metadata":      metadata,
+			"image":             metadata["image"],
+			"site_name":         metadata["site_name"],
+			"title":             metadata["title"],
+			"description":       metadata["description"],
 		}
 
 		// Update extraction status
@@ -206,20 +215,43 @@ func (p *JobProcessor) extractOgMetadataFromHTML(r io.Reader) (map[string]string
 	return ogData, nil
 }
 
-// findOgMetaInNode recursively searches for Open Graph meta tags and collects their content
+// findOgMetaInNode recursively searches for Open Graph and Twitter Card meta tags and collects their content
 func (p *JobProcessor) findOgMetaInNode(n *html.Node, ogData map[string]string) {
 	if n.Type == html.ElementNode && n.Data == "meta" {
-		// Look for <meta property="og:*" content="...">
 		var property, content string
+
+		// Parse attributes to find property/name and content
 		for _, attr := range n.Attr {
-			if attr.Key == "property" && strings.HasPrefix(attr.Val, "og:") {
-				property = strings.TrimPrefix(attr.Val, "og:")
-			} else if attr.Key == "content" {
+			if attr.Key == "content" {
 				content = attr.Val
+			} else if attr.Key == "property" && strings.HasPrefix(attr.Val, "og:") {
+				// OpenGraph tags: <meta property="og:title" content="...">
+				property = strings.TrimPrefix(attr.Val, "og:")
+			} else if attr.Key == "name" && strings.HasPrefix(attr.Val, "twitter:") {
+				// Twitter Card tags: <meta name="twitter:title" content="...">
+				twitterProperty := strings.TrimPrefix(attr.Val, "twitter:")
+				// Map Twitter Card properties to OpenGraph equivalents
+				switch twitterProperty {
+				case "title":
+					property = "title"
+				case "description":
+					property = "description"
+				case "image":
+					property = "image"
+				case "site":
+					property = "site_name"
+				default:
+					property = twitterProperty // Keep other Twitter properties as-is
+				}
 			}
 		}
+
+		// Only store if we have both property and content, and don't overwrite existing OpenGraph data
 		if property != "" && content != "" {
-			ogData[property] = content
+			// Prioritize OpenGraph over Twitter Cards - only set if not already present
+			if _, exists := ogData[property]; !exists {
+				ogData[property] = content
+			}
 		}
 	}
 
@@ -307,4 +339,279 @@ func (p *JobProcessor) findTitleInNode(n *html.Node) string {
 	}
 
 	return ""
+}
+
+// extractMetadataWithRod uses a headless browser to extract metadata from JavaScript-rendered pages
+func (p *JobProcessor) extractMetadataWithRod(ctx context.Context, url string) (map[string]string, error) {
+	p.logger.Info("Starting Rod-based metadata extraction", "url", url)
+
+	// Create context with timeout for Rod operations
+	rodCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	// Launch headless browser with proper flags for JavaScript execution
+	launcher := launcher.New().
+		Headless(true).
+		Set("no-sandbox").
+		Set("disable-web-security").
+		Set("disable-features", "VizDisplayCompositor").
+		Set("disable-extensions").
+		Set("disable-plugins")
+	defer launcher.Cleanup()
+
+	// Add timeout for browser launch
+	launchCtx, launchCancel := context.WithTimeout(rodCtx, 15*time.Second)
+	defer launchCancel()
+
+	p.logger.Info("Launching browser with Rod", "url", url)
+	controlURL, err := launcher.Context(launchCtx).Launch()
+	if err != nil {
+		return nil, fmt.Errorf("failed to launch browser (timeout after 15s): %w", err)
+	}
+	p.logger.Info("Browser launched successfully", "url", url, "control_url", controlURL)
+
+	// Connect to browser with timeout
+	browser := rod.New().ControlURL(controlURL)
+	connectCtx, connectCancel := context.WithTimeout(rodCtx, 10*time.Second)
+	defer connectCancel()
+
+	if err := browser.Context(connectCtx).Connect(); err != nil {
+		return nil, fmt.Errorf("failed to connect to browser (timeout after 10s): %w", err)
+	}
+	defer browser.MustClose()
+	p.logger.Info("Connected to browser successfully", "url", url)
+
+	// Create page and navigate
+	p.logger.Info("Creating browser page", "url", url)
+	page := browser.MustPage()
+	defer page.MustClose()
+
+	// Set user agent to avoid blocking
+	p.logger.Info("Setting user agent", "url", url)
+	page.MustSetUserAgent(&proto.NetworkSetUserAgentOverride{
+		UserAgent: "Mozilla/5.0 (compatible; KnokFM/1.0)",
+	})
+
+	// Navigate to URL with simpler approach
+	p.logger.Info("Navigating to URL", "url", url)
+	
+	// Use a more basic navigation approach with timeout
+	navCtx, navCancel := context.WithTimeout(rodCtx, 15*time.Second)
+	defer navCancel()
+	
+	if err := rod.Try(func() {
+		page.Context(navCtx).MustNavigate(url)
+		p.logger.Info("Page navigation completed", "url", url)
+		
+		// Simple wait for load
+		page.MustWaitLoad()
+		p.logger.Info("Page load completed", "url", url)
+		
+		// Wait a fixed amount of time for JavaScript to execute
+		time.Sleep(3 * time.Second)
+		p.logger.Info("JavaScript wait completed", "url", url)
+	}); err != nil {
+		return nil, fmt.Errorf("failed to navigate to page: %w", err)
+	}
+
+	// Get the rendered HTML
+	html, err := page.HTML()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get page HTML: %w", err)
+	}
+
+	// Debug: Log first 500 chars of HTML to see what Rod extracted
+	htmlPreview := html
+	if len(htmlPreview) > 500 {
+		htmlPreview = htmlPreview[:500] + "..."
+	}
+	p.logger.Debug("Rod HTML preview", "url", url, "html_start", htmlPreview)
+	
+	// Parse the rendered HTML using existing HTML parsing logic
+	metadata, err := p.extractOgMetadataFromHTML(strings.NewReader(html))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse metadata from rendered HTML: %w", err)
+	}
+	
+	// Debug: Log what metadata was found
+	p.logger.Debug("Rod metadata parsed", 
+		"url", url,
+		"metadata_count", len(metadata),
+		"has_title", metadata["title"] != "",
+		"has_description", metadata["description"] != "",
+		"has_image", metadata["image"] != "")
+
+	p.logger.Info("Rod extraction completed",
+		"url", url,
+		"title", metadata["title"],
+		"description", metadata["description"],
+		"image", metadata["image"])
+
+	return metadata, nil
+}
+
+// extractMetadataWithRodSimple uses the simplest possible Rod approach
+func (p *JobProcessor) extractMetadataWithRodSimple(ctx context.Context, url string) (map[string]string, error) {
+	p.logger.Info("Starting simple Rod metadata extraction", "url", url)
+	
+	// Create timeout context
+	rodCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	
+	// Use Rod's default browser (will download Chrome if needed)
+	browser := rod.New().Context(rodCtx).MustConnect()
+	defer browser.MustClose()
+	
+	p.logger.Info("Rod browser connected", "url", url)
+	
+	// Navigate to page
+	page := browser.MustPage(url)
+	defer page.MustClose()
+	
+	p.logger.Info("Rod navigated to page", "url", url)
+	
+	// Wait for page load
+	page.MustWaitLoad()
+	p.logger.Info("Rod page loaded", "url", url)
+	
+	// Wait for JavaScript (fixed time)
+	time.Sleep(3 * time.Second)
+	p.logger.Info("Rod wait completed", "url", url)
+	
+	// Get HTML
+	html := page.MustHTML()
+	p.logger.Info("Rod HTML extracted", "url", url, "length", len(html))
+	
+	// Parse metadata
+	metadata, err := p.extractOgMetadataFromHTML(strings.NewReader(html))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse HTML: %w", err)
+	}
+	
+	p.logger.Info("Rod metadata parsed", 
+		"url", url,
+		"title", metadata["title"],
+		"description", metadata["description"],
+		"image", metadata["image"])
+	
+	return metadata, nil
+}
+
+// extractMetadataWithFallbacks implements the three-tier metadata extraction strategy
+func (p *JobProcessor) extractMetadataWithFallbacks(ctx context.Context, url string) (map[string]string, string, error) {
+	p.logger.Info("Starting three-tier metadata extraction", "url", url)
+
+	// Tier 1: HTTP + Static HTML Parsing
+	p.logger.Info("Tier 1: Attempting HTTP-based metadata extraction", "url", url)
+	httpMetadata, err := p.extractOgMetadata(ctx, url)
+	if err != nil {
+		p.logger.Warn("HTTP metadata extraction failed", "error", err, "url", url)
+		httpMetadata = make(map[string]string)
+	}
+	
+	// Debug: Log what HTTP extraction found
+	p.logger.Info("HTTP metadata extraction results", 
+		"url", url,
+		"title", httpMetadata["title"],
+		"description", httpMetadata["description"], 
+		"image", httpMetadata["image"],
+		"site_name", httpMetadata["site_name"],
+		"total_fields", len(httpMetadata))
+
+	// Get basic title as fallback
+	title, titleErr := p.extractTitleFromURL(ctx, url)
+	if titleErr != nil {
+		p.logger.Warn("Title extraction failed", "error", titleErr, "url", url)
+		title = "Unknown Title"
+	}
+
+	// Check if we have sufficient metadata from HTTP parsing
+	hasTitle := httpMetadata["title"] != ""
+	hasDescription := httpMetadata["description"] != ""
+	hasImage := httpMetadata["image"] != ""
+
+	// Use URL as description if missing
+	if hasTitle && !hasDescription {
+		httpMetadata["description"] = url
+		hasDescription = true
+		p.logger.Debug("Using URL as description fallback", "url", url)
+	}
+
+	// If we have all key metadata, use HTTP results
+	if hasTitle && (hasDescription || hasImage) {
+		p.logger.Info("HTTP extraction successful, using tier 1 results",
+			"url", url,
+			"title", httpMetadata["title"],
+			"has_description", hasDescription,
+			"has_image", hasImage)
+		return httpMetadata, "http_static", nil
+	}
+
+	// Tier 2: Rod Headless Browser (for JavaScript-rendered content)
+	p.logger.Info("Tier 2: Attempting Rod-based metadata extraction", "url", url)
+	rodMetadata, rodErr := p.extractMetadataWithRodSimple(ctx, url)
+	
+	if rodErr != nil {
+		p.logger.Warn("Rod metadata extraction skipped/failed", "error", rodErr, "url", url)
+	} else {
+		// Merge Rod results with HTTP results, prioritizing Rod for missing fields
+		mergedMetadata := make(map[string]string)
+
+		// Copy HTTP results first
+		for k, v := range httpMetadata {
+			mergedMetadata[k] = v
+		}
+
+		// Fill in missing fields with Rod results
+		for k, v := range rodMetadata {
+			if v != "" && mergedMetadata[k] == "" {
+				mergedMetadata[k] = v
+			}
+		}
+
+		// Check if Rod improved our metadata
+		rodHasTitle := mergedMetadata["title"] != ""
+		rodHasDescription := mergedMetadata["description"] != ""
+		rodHasImage := mergedMetadata["image"] != ""
+
+		// Use URL as description if missing
+		if rodHasTitle && !rodHasDescription {
+			mergedMetadata["description"] = url
+			rodHasDescription = true
+			p.logger.Debug("Using URL as description fallback for Rod results", "url", url)
+		}
+
+		if rodHasTitle && (rodHasDescription || rodHasImage) {
+			p.logger.Info("Rod extraction successful, using tier 2 results",
+				"url", url,
+				"title", mergedMetadata["title"],
+				"has_description", rodHasDescription,
+				"has_image", rodHasImage)
+			return mergedMetadata, "rod_browser", nil
+		}
+	}
+
+	// Tier 3: Final Fallback (basic title only)
+	p.logger.Info("Tier 3: Using basic title fallback", "url", url, "title", title)
+	fallbackMetadata := map[string]string{
+		"title": title,
+	}
+
+	// Include any partial metadata we managed to extract
+	if httpMetadata["description"] != "" {
+		fallbackMetadata["description"] = httpMetadata["description"]
+	} else {
+		// Always use URL as description if no description was found
+		fallbackMetadata["description"] = url
+		p.logger.Debug("Using URL as description fallback in tier 3", "url", url)
+	}
+	
+	if httpMetadata["image"] != "" {
+		fallbackMetadata["image"] = httpMetadata["image"]
+	}
+	if httpMetadata["site_name"] != "" {
+		fallbackMetadata["site_name"] = httpMetadata["site_name"]
+	}
+
+	return fallbackMetadata, "title_fallback", nil
 }

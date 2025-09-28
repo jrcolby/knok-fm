@@ -4,33 +4,13 @@ import (
 	"context"
 	"fmt"
 	"knock-fm/internal/domain"
-	"regexp"
-	"strings"
+	"knock-fm/internal/pkg/urldetector"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 )
 
-// URL patterns for different music platforms - simplified to host-based matching
-var urlPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)(?:https?://)?(?:www\.)?youtube\.com`),
-	regexp.MustCompile(`(?i)(?:https?://)?(?:www\.)?youtu\.be`),
-	regexp.MustCompile(`(?i)(?:https?://)?(?:www\.)?soundcloud\.com`),
-	regexp.MustCompile(`(?i)(?:https?://)?(?:www\.)?mixcloud\.com`),
-	regexp.MustCompile(`(?i)(?:https?://)?[\w-]+\.bandcamp\.com`),
-	regexp.MustCompile(`(?i)(?:https?://)?(open\.)?spotify\.com`),
-	regexp.MustCompile(`(?i)(?:https?://)?music\.apple\.com`),
-	regexp.MustCompile(`(?i)(?:https?://)?(?:www\.)?nts\.live`),
-	regexp.MustCompile(`(?i)(?:https?://)?(?:www\.)?dublab\.com`),
-	regexp.MustCompile(`(?i)(?:https?://)?noodsradio\.com`),
-}
-
-// URLInfo contains information about a detected URL
-type URLInfo struct {
-	URL      string
-	Platform string
-}
 
 // onMessageCreate handles new Discord messages
 func (s *BotService) onMessageCreate(session *discordgo.Session, message *discordgo.MessageCreate) {
@@ -117,7 +97,7 @@ func (s *BotService) onMessageCreate(session *discordgo.Session, message *discor
 }
 
 // processDetectedURL creates knok records and queues metadata extraction jobs
-func (s *BotService) processDetectedURL(message *discordgo.MessageCreate, urlInfo URLInfo) error {
+func (s *BotService) processDetectedURL(message *discordgo.MessageCreate, urlInfo urldetector.URLInfo) error {
 	ctx := context.Background()
 
 	// DEBUG: Track processDetectedURL invocations
@@ -139,8 +119,9 @@ func (s *BotService) processDetectedURL(message *discordgo.MessageCreate, urlInf
 		if err == nil && existingKnok != nil {
 			// Use existing knok ID
 			knokID = existingKnok.ID
-			s.logger.Debug("Using existing knok",
+			s.logger.Debug("Found existing knok by Discord message",
 				"existing_knok_id", existingKnok.ID,
+				"extraction_status", existingKnok.ExtractionStatus,
 			)
 		}
 	}
@@ -151,8 +132,9 @@ func (s *BotService) processDetectedURL(message *discordgo.MessageCreate, urlInf
 		if err == nil && existingKnok != nil {
 			// Use existing knok ID
 			knokID = existingKnok.ID
-			s.logger.Debug("Using existing knok",
+			s.logger.Debug("Found existing knok by URL",
 				"knok_id", knokID,
+				"extraction_status", existingKnok.ExtractionStatus,
 			)
 		}
 	}
@@ -216,10 +198,30 @@ func (s *BotService) processDetectedURL(message *discordgo.MessageCreate, urlInf
 
 		// Store knok in database
 		if err := s.knokRepo.Create(ctx, knok); err != nil {
-			s.logger.Debug("Knok already created by another process",
+			s.logger.Debug("Knok creation failed, checking if it already exists",
 				"knok_id", knokID,
+				"error", err,
 			)
-			// Continue with job queueing even if creation fails
+			
+			// Check if knok already exists (possible race condition)
+			if existingCheck, checkErr := s.knokRepo.GetByID(ctx, knokID); checkErr != nil {
+				s.logger.Error("Failed to create knok and failed to verify existence",
+					"knok_id", knokID,
+					"create_error", err,
+					"check_error", checkErr,
+				)
+				return fmt.Errorf("failed to create knok: %w", err)
+			} else if existingCheck != nil {
+				s.logger.Debug("Knok already exists, continuing with job queue",
+					"knok_id", knokID,
+				)
+			} else {
+				s.logger.Error("Knok creation failed and knok doesn't exist",
+					"knok_id", knokID,
+					"error", err,
+				)
+				return fmt.Errorf("failed to create knok: %w", err)
+			}
 		} else {
 			s.logger.Info("Knok record created",
 				"knok_id", knokID,
@@ -235,6 +237,49 @@ func (s *BotService) processDetectedURL(message *discordgo.MessageCreate, urlInf
 		s.logger.Debug("Knok repository not available, skipping database storage",
 			"knok_id", knokID,
 		)
+	}
+
+	// Decide whether to queue metadata extraction job based on existing knok status
+	shouldQueueJob := true
+	if existingKnok != nil {
+		switch existingKnok.ExtractionStatus {
+		case domain.ExtractionStatusComplete:
+			// Metadata already extracted successfully, no need to re-process
+			shouldQueueJob = false
+			s.logger.Info("Knok already has complete metadata, skipping job queue",
+				"knok_id", knokID,
+				"url", urlInfo.URL,
+				"title", func() string {
+					if existingKnok.Title != nil {
+						return *existingKnok.Title
+					}
+					return "N/A"
+				}(),
+			)
+		case domain.ExtractionStatusProcessing:
+			// Already being processed, don't queue duplicate job
+			shouldQueueJob = false
+			s.logger.Info("Knok is currently being processed, skipping job queue",
+				"knok_id", knokID,
+				"url", urlInfo.URL,
+			)
+		case domain.ExtractionStatusPending, domain.ExtractionStatusFailed:
+			// Should re-process pending or failed extractions
+			shouldQueueJob = true
+			s.logger.Info("Knok needs metadata extraction, queuing job",
+				"knok_id", knokID,
+				"url", urlInfo.URL,
+				"current_status", existingKnok.ExtractionStatus,
+			)
+		}
+	}
+
+	if !shouldQueueJob {
+		s.logger.Debug("Skipping job queue for existing knok",
+			"knok_id", knokID,
+			"extraction_status", existingKnok.ExtractionStatus,
+		)
+		return nil
 	}
 
 	// Queue the metadata extraction job
@@ -269,36 +314,8 @@ func (s *BotService) processDetectedURL(message *discordgo.MessageCreate, urlInf
 	return nil
 }
 
-// extractURLs finds all supported music URLs in a message
-func (s *BotService) extractURLs(content string) []URLInfo {
-	var urls []URLInfo
-	seen := make(map[string]bool)
-
-	// Split content into words and check each for URL patterns
-	words := strings.Fields(content)
-	for _, word := range words {
-		for _, pattern := range urlPatterns {
-			if pattern.MatchString(word) {
-				// Clean up the URL (remove any trailing punctuation)
-				url := strings.TrimRight(word, ".,!?;:")
-
-				// Avoid duplicates
-				if !seen[url] {
-					seen[url] = true
-					urls = append(urls, URLInfo{
-						URL:      url,
-						Platform: s.detectPlatform(url),
-					})
-				}
-				break
-			}
-		}
-	}
-
-	return urls
+// extractURLs finds all supported music URLs in a message using centralized detector
+func (s *BotService) extractURLs(content string) []urldetector.URLInfo {
+	return s.urlDetector.DetectURLs(content)
 }
 
-// detectPlatform determines the platform from a URL
-func (s *BotService) detectPlatform(url string) string {
-	return domain.DetectPlatformFromURL(url)
-}

@@ -135,9 +135,9 @@ func (r *KnokRepository) processMetadata(knok *domain.Knok, metadataBytes []byte
 
 // Uses Postgres random query ability to get a random knok row
 func (r *KnokRepository) GetRandom(ctx context.Context) (*domain.Knok, error) {
-	// First get total count
+	// First get total completed knoks count
 	var count int
-	countQuery := "SELECT COUNT(*) FROM knoks"
+	countQuery := "SELECT COUNT(*) FROM knoks WHERE extraction_status = 'complete'"
 	err := r.db.QueryRowContext(ctx, countQuery).Scan(&count)
 	if err != nil {
 		r.logger.Error("Failed to count knoks", "error", err)
@@ -152,6 +152,7 @@ func (r *KnokRepository) GetRandom(ctx context.Context) (*domain.Knok, error) {
 	offset := rand.Intn(count)
 
 	query := knokSelectFields + `
+		WHERE extraction_status = 'complete'
 		OFFSET $1 LIMIT 1`
 	row := r.db.QueryRowContext(ctx, query, offset)
 
@@ -468,13 +469,13 @@ func (r *KnokRepository) GetRecentByServer(ctx context.Context, serverID string,
 
 	if cursor == nil {
 		query = knokSelectFields + `
-			WHERE server_id = $1
+			WHERE server_id = $1 AND extraction_status = 'complete'
 			ORDER BY posted_at DESC
 			LIMIT $2`
 		args = []interface{}{serverID, limit}
 	} else {
 		query = knokSelectFields + `
-			WHERE server_id = $1 AND posted_at < $2
+			WHERE server_id = $1 AND posted_at < $2 AND extraction_status = 'complete'
 			ORDER BY posted_at DESC
 			LIMIT $3`
 		args = []interface{}{serverID, *cursor, limit}

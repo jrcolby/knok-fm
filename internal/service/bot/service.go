@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"knock-fm/internal/config"
 	"knock-fm/internal/domain"
+	"knock-fm/internal/pkg/urldetector"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -15,12 +16,13 @@ import (
 
 // BotService handles Discord bot operations
 type BotService struct {
-	config     *config.Config
-	logger     *slog.Logger
-	session    *discordgo.Session
-	queueRepo  domain.QueueRepository
-	knokRepo   domain.KnokRepository // Optional - for storing knoks
-	serverRepo domain.ServerRepository
+	config      *config.Config
+	logger      *slog.Logger
+	session     *discordgo.Session
+	queueRepo   domain.QueueRepository
+	knokRepo    domain.KnokRepository // Optional - for storing knoks
+	serverRepo  domain.ServerRepository
+	urlDetector *urldetector.Detector
 
 	// State
 	ctx    context.Context
@@ -38,13 +40,14 @@ func New(
 	ctx, cancel := context.WithCancel(context.Background())
 
 	botService := &BotService{
-		config:     config,
-		logger:     logger,
-		queueRepo:  queueRepo,
-		knokRepo:   knokRepo,
-		serverRepo: serverRepo,
-		ctx:        ctx,
-		cancel:     cancel,
+		config:      config,
+		logger:      logger,
+		queueRepo:   queueRepo,
+		knokRepo:    knokRepo,
+		serverRepo:  serverRepo,
+		urlDetector: urldetector.New(),
+		ctx:         ctx,
+		cancel:      cancel,
 	}
 
 	logger.Debug("BOT_SERVICE_CREATED: New bot service instance created",

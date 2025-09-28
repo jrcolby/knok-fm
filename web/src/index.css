@@ -3,14 +3,24 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@font-face {
+  font-family: 'Plastique';
+  src: url('/fonts/Plastique.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
-  --color-knok-bg: #1f1d1d;
-  --color-knok-accent: #fecf34;
+  --color-knok-bg: #221f20;
+  --color-knok-accent: #fdd403;
   --color-knok-surface: #262626;
   --color-knok-border: #404040;
   --color-knok-text: #e5e5e5;
   --color-knok-text-dim: #a3a3a3;
   --color-mint-500: oklch(0.72 0.11 178);
+  --font-family-plastique: 'Plastique', ui-sans-serif, system-ui, sans-serif;
+  --font-family-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 
 @theme inline {
@@ -126,5 +136,106 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  .font-plastique {
+    font-family: 'Plastique', ui-sans-serif, system-ui, sans-serif;
+  }
+}
+
+/* Blobby gradient background animation */
+.knok-gradient-bg {
+  background: linear-gradient(
+    45deg,
+    #221f20,
+    #2d2d2d,
+    #404040,
+    #221f20,
+    #262626,
+    #333333
+  );
+  background-size: 600% 600%;
+  animation: blobby-gradient 90s ease infinite;
+}
+
+.knok-gradient-bg::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(
+      circle at 20% 50%,
+      rgba(254, 207, 52, 0.15) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      circle at 80% 20%,
+      rgba(254, 207, 52, 0.1) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      circle at 40% 80%,
+      rgba(254, 207, 52, 0.08) 0%,
+      transparent 50%
+    );
+  background-size: 800% 800%, 600% 600%, 700% 700%;
+  animation: blob-1 90s ease-in-out infinite,
+    blob-2 90s ease-in-out infinite reverse, blob-3 35s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes blobby-gradient {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  25% {
+    background-position: 100% 30%;
+  }
+  50% {
+    background-position: 50% 100%;
+  }
+  75% {
+    background-position: 80% 10%;
+  }
+}
+
+@keyframes blob-1 {
+  0%,
+  100% {
+    background-position: 0% 50%, 80% 20%, 40% 80%;
+  }
+  33% {
+    background-position: 100% 30%, 20% 80%, 60% 20%;
+  }
+  66% {
+    background-position: 50% 100%, 90% 50%, 10% 60%;
+  }
+}
+
+@keyframes blob-2 {
+  0%,
+  100% {
+    background-position: 80% 20%, 40% 80%, 0% 50%;
+  }
+  33% {
+    background-position: 20% 80%, 60% 20%, 100% 30%;
+  }
+  66% {
+    background-position: 90% 50%, 10% 60%, 50% 100%;
+  }
+}
+
+@keyframes blob-3 {
+  0%,
+  100% {
+    background-position: 40% 80%, 0% 50%, 80% 20%;
+  }
+  50% {
+    background-position: 60% 20%, 100% 30%, 20% 80%;
   }
 }

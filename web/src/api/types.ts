@@ -5,7 +5,15 @@ export interface KnokDto {
   id: string;
   title: string;
   url: string;
-  posted_at: string; // ISO 8601 timestamp
+  posted_at: string;
+  metadata: KnokMetaData;
+}
+
+export interface KnokMetaData {
+  title?: string;
+  image?: string;
+  site_name?: string;
+  description?: string;
 }
 
 export interface KnoksResponse {
@@ -31,9 +39,10 @@ export const PLATFORMS = {
   BANDCAMP: "bandcamp",
   SPOTIFY: "spotify",
   APPLE_MUSIC: "apple_music",
-  NTS: `nts`,
-  DUBLAB: `dublab`,
-  NOODS: `noods`,
+  NTS: "nts",
+  DUBLAB: "dublab",
+  NOODS: "noods",
+  RINSE_FM: "rinse_fm",
 } as const;
 
 export type Platform = (typeof PLATFORMS)[keyof typeof PLATFORMS];

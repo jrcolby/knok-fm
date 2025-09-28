@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"knock-fm/internal/domain"
 	"log/slog"
 )
 
@@ -94,6 +95,17 @@ var migrations = []Migration{
 			CREATE TRIGGER knoks_search_vector_update
 				BEFORE INSERT OR UPDATE ON knoks
 				FOR EACH ROW EXECUTE FUNCTION update_knoks_search_vector();
+		`,
+	},
+	{
+		Version: 2,
+		Name:    "update_platform_constraint",
+		SQL: `
+			-- Drop the old platform constraint
+			ALTER TABLE knoks DROP CONSTRAINT IF EXISTS knoks_platform_check;
+			
+			-- Add new platform constraint with all supported platforms
+			ALTER TABLE knoks ADD CONSTRAINT knoks_platform_check ` + domain.GetPlatformConstraintSQL() + `;
 		`,
 	},
 }

@@ -1,4 +1,4 @@
-import type { KnoksResponse } from "./types";
+import type { KnoksResponse, KnokDto } from "./types";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
@@ -86,6 +86,15 @@ class ApiClient {
       queryString ? `?${queryString}` : ""
     }`;
     return this.request<KnoksResponse>(endpoint);
+  }
+
+  async getRandomKnok(): Promise<KnoksResponse> {
+    const knok = await this.request<KnokDto>("/api/v1/knoks/random");
+    // Wrap single knok in KnoksResponse format for consistency
+    return {
+      knoks: [knok],
+      has_more: false,
+    };
   }
   async healthCheck(): Promise<{ status: string }> {
     return this.request<{ status: string }>("/health");

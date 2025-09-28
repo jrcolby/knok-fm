@@ -64,8 +64,14 @@ func (h *KnoksHandler) buildKnokResponse(knoks []*domain.Knok, requestedLimit in
 
 	knokDtos := make([]*KnokDto, 0, len(knoks))
 	for _, knok := range knoks {
+		// Handle nil title gracefully (happens when extraction is still processing)
+		title := "Processing..."
+		if knok.Title != nil {
+			title = *knok.Title
+		}
+		
 		knokDtos = append(knokDtos, &KnokDto{
-			Title:    *knok.Title,
+			Title:    title,
 			PostedAt: knok.PostedAt,
 			ID:       knok.ID.String(),
 			URL:      knok.URL,
@@ -105,8 +111,14 @@ func (h *KnoksHandler) GetRandomKnok(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
+	// Handle nil title gracefully (should not happen with completed knoks)
+	title := "Processing..."
+	if knok.Title != nil {
+		title = *knok.Title
+	}
+	
 	response := &KnokDto{
-		Title:    *knok.Title,
+		Title:    title,
 		PostedAt: knok.PostedAt,
 		ID:       knok.ID.String(),
 		URL:      knok.URL,
