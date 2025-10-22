@@ -2,10 +2,6 @@
 
 A Discord music bot built with Go that automatically detects and tracks music URLs shared in your server. Features advanced URL detection, metadata extraction, and a web dashboard for browsing shared music.
 
-## 🚀 Production Deployment
-
-**Want to deploy this to production?** See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete Digital Ocean deployment guide with Docker, Caddy, and auto-SSL.
-
 ## Features
 
 - **Smart URL Detection**: Detects music URLs in various formats including markdown links, mobile share URLs, and Discord-suppressed embeds
@@ -29,23 +25,27 @@ A Discord music bot built with Go that automatically detects and tracks music UR
 ### Setup
 
 1. **Clone the repository**
+
    ```bash
    git clone https://github.com/yourusername/knock-fm.git
    cd knock-fm
    ```
 
 2. **Install dependencies**
+
    ```bash
    go mod tidy
    cd web && npm install
    ```
 
 3. **Start development services** (PostgreSQL and Redis)
+
    ```bash
    make dev-services
    ```
 
 4. **Configure environment**
+
    ```bash
    cp .env.example .env
    # Edit .env and add your DISCORD_TOKEN
@@ -65,11 +65,13 @@ A Discord music bot built with Go that automatically detects and tracks music UR
 See `.env.example` for all available configuration options.
 
 **Required:**
+
 - `DATABASE_URL` - PostgreSQL connection string
 - `REDIS_URL` - Redis connection string
 - `DISCORD_TOKEN` - Your Discord bot token
 
 **Optional:**
+
 - `UNKNOWN_PLATFORM_MODE` - How to handle unknown platforms (`permissive` or `strict`, default: `permissive`)
 - `LOG_LEVEL` - Logging level (`debug`, `info`, `warn`, `error`, default: `info`)
 - `PORT` - HTTP server port (default: `8080`)
@@ -81,24 +83,26 @@ See `.env.example` for all available configuration options.
 Control where the bot responds using these optional settings:
 
 **`DISCORD_ALLOWED_GUILDS`** - Restrict which Discord servers (guilds) the bot operates in:
+
 ```bash
 # Single server
-DISCORD_ALLOWED_GUILDS=1404225099841667072
+DISCORD_ALLOWED_GUILDS=exampleserverid
 
 # Multiple servers
-DISCORD_ALLOWED_GUILDS=1404225099841667072,9876543210123456789
+DISCORD_ALLOWED_GUILDS=exampleserverid1,exampleserverid2
 
 # All servers (default)
 DISCORD_ALLOWED_GUILDS=
 ```
 
 **`DISCORD_ALLOWED_CHANNELS`** - Restrict which channels the bot listens to:
+
 ```bash
 # Single channel
-DISCORD_ALLOWED_CHANNELS=1322276431471968356
+DISCORD_ALLOWED_CHANNELS=examplechannelid
 
 # Multiple channels
-DISCORD_ALLOWED_CHANNELS=1322276431471968356,9876543210123456789
+DISCORD_ALLOWED_CHANNELS=DISCORD_ALLOWED_CHANNELS=examplechannelid1,examplechannelid1
 
 # All channels (default)
 DISCORD_ALLOWED_CHANNELS=
@@ -112,11 +116,13 @@ DISCORD_ALLOWED_CHANNELS=
 **Strict Mode**: Only processes URLs from known music platforms
 
 Set globally via environment:
+
 ```bash
 UNKNOWN_PLATFORM_MODE=strict
 ```
 
 Or override per Discord server via database:
+
 ```sql
 UPDATE servers
 SET settings = jsonb_set(settings, '{unknown_platform_mode}', '"strict"')
@@ -137,6 +143,7 @@ See [`CLAUDE.md`](CLAUDE.md) for detailed technical documentation.
 ## Development
 
 **Make commands:**
+
 - `make dev-services` - Start PostgreSQL and Redis
 - `make dev-bot` - Run Discord bot
 - `make dev-worker` - Run background worker
@@ -146,28 +153,11 @@ See [`CLAUDE.md`](CLAUDE.md) for detailed technical documentation.
 - `make lint` - Run linting
 
 **Project uses:**
+
 - Podman for containerization (can substitute Docker)
 - PostgreSQL for data storage
 - Redis for job queues
 - Discord.js for bot functionality
-
-## Supported Platforms
-
-**Major Streaming:**
-- YouTube (including Music and mobile)
-- Spotify (including mobile share links)
-- SoundCloud (including short links)
-- Apple Music
-- Tidal
-- Deezer
-
-**Other:**
-- Bandcamp
-- Mixcloud
-- NTS Radio
-- Dublab
-- Noods Radio
-- Rinse FM
 
 Unknown platforms can be handled permissively (accept all) or strictly (reject).
 
