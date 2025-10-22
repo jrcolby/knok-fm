@@ -33,6 +33,9 @@ type KnokRepository interface {
 	// GetByURL finds knoks by URL within a server (for duplicate detection)
 	GetByURL(ctx context.Context, serverID, url string) (*Knok, error)
 
+	// GetRecent gets the most recent knoks across all servers with cursor pagination (global timeline)
+	GetRecent(ctx context.Context, cursor *time.Time, limit int) ([]*Knok, error)
+
 	// GetRecentByServer gets the most recent knoks for a server with cursor pagination
 	GetRecentByServer(ctx context.Context, serverID string, cursor *time.Time, limit int) ([]*Knok, error)
 
@@ -41,6 +44,14 @@ type KnokRepository interface {
 
 	// UpdateExtractionStatus updates the metadata extraction status
 	UpdateExtractionStatus(ctx context.Context, id uuid.UUID, status string) error
+}
+
+// ServerRepository defines the interface for platform data operations
+type PlatformRepository interface {
+	CreatePlatform(ctx context.Context, platform *Platform) error
+	GetAllPlatforms(ctx context.Context, cursor *time.Time, limit int) ([]*Platform, error)
+	UpdatePlatform(ctx context.Context, platform *Platform) error
+	DeletePlatform(ctx context.Context, id string) error
 }
 
 // ServerRepository defines the interface for Discord server data operations

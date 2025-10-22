@@ -7,13 +7,33 @@ type Server struct {
 	ID                  string                 `json:"id" db:"id"`
 	Name                string                 `json:"name" db:"name"`
 	ConfiguredChannelID *string                `json:"configured_channel_id" db:"configured_channel_id"`
+
+	// Settings is stored as JSONB in the database and contains server-specific configuration
+	// Schema documented in ServerSettings struct below
 	Settings            map[string]interface{} `json:"settings" db:"settings"`
+
 	CreatedAt           time.Time              `json:"created_at" db:"created_at"`
 	UpdatedAt           *time.Time             `json:"updated_at" db:"updated_at"`
 }
 
-// ServerSettings represents configurable server options
+// ServerSettings represents configurable server options stored in the Settings JSONB field
+//
+// Example Settings JSONB:
+// {
+//   "unknown_platform_mode": "permissive",  // or "strict"
+//   "auto_extraction": true,
+//   "allowed_channels": ["123456789"],
+//   "banned_users": ["987654321"],
+//   "require_metadata": false,
+//   "notification_channel": "111222333",
+//   "max_knoks_per_user": 100
+// }
 type ServerSettings struct {
+	// UnknownPlatformMode controls how the server handles URLs from unrecognized platforms
+	// Values: "permissive" (accept all URLs) or "strict" (reject unknown platforms)
+	// If not set, falls back to global config.DefaultUnknownPlatformMode
+	UnknownPlatformMode *string  `json:"unknown_platform_mode"`
+
 	AutoExtraction      bool     `json:"auto_extraction"`
 	AllowedChannels     []string `json:"allowed_channels"`
 	BannedUsers         []string `json:"banned_users"`

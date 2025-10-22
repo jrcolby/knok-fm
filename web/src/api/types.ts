@@ -45,6 +45,17 @@ export const PLATFORMS = {
   RINSE_FM: "rinse_fm",
 } as const;
 
+// discord bot and worker metadata extraction service. will make a call to db instead of
+// usinh hardcoded. I think both use the url detector package
+export interface PlatformData {
+  id: string;
+  name: string;
+  // url recognition path, or could this just be paths?
+  // mobile and shortened links
+  created_at: string; // ISO 8601 string
+  updated_at?: string; // ISO 8601 string
+}
+
 export type Platform = (typeof PLATFORMS)[keyof typeof PLATFORMS];
 
 // Extraction status constants matching Go constants

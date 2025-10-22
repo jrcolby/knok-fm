@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"knock-fm/internal/domain"
 	"knock-fm/internal/http/handlers"
 	"knock-fm/internal/http/middleware"
@@ -8,23 +9,42 @@ import (
 	"net/http"
 )
 
-type Router struct {
-	mux            *http.ServeMux
-	healthHandler  *handlers.HealthHandler
-	statsHandler   *handlers.StatsHandler
-	serversHandler *handlers.ServersHandler
-	knoksHandler   *handlers.KnoksHandler
+// PlatformLoader defines the interface for platform cache management
+type PlatformLoader interface {
+	Refresh(ctx context.Context) error
+	GetAll() ([]*domain.Platform, error)
+	Count() int
 }
 
-func NewRouter(logger *slog.Logger, serverRepo domain.ServerRepository, knokRepo domain.KnokRepository) *Router {
+type Router struct {
+	mux                  *http.ServeMux
+	logger               *slog.Logger
+	healthHandler        *handlers.HealthHandler
+	statsHandler         *handlers.StatsHandler
+	serversHandler       *handlers.ServersHandler
+	knoksHandler         *handlers.KnoksHandler
+	adminPlatformHandler *handlers.AdminPlatformHandler
+	adminAuth            *middleware.AdminAuth
+}
+
+func NewRouter(
+	logger *slog.Logger,
+	serverRepo domain.ServerRepository,
+	knokRepo domain.KnokRepository,
+	platformRepo handlers.PlatformRepository,
+	platformLoader PlatformLoader,
+) *Router {
 	mux := http.NewServeMux()
 
 	return &Router{
-		mux:            mux,
-		healthHandler:  handlers.NewHealthHandler(logger),
-		statsHandler:   handlers.NewStatsHandler(logger),
-		serversHandler: handlers.NewServersHandler(logger, serverRepo),
-		knoksHandler:   handlers.NewKnoksHandler(logger, knokRepo),
+		mux:                  mux,
+		logger:               logger,
+		healthHandler:        handlers.NewHealthHandler(logger),
+		statsHandler:         handlers.NewStatsHandler(logger),
+		serversHandler:       handlers.NewServersHandler(logger, serverRepo),
+		knoksHandler:         handlers.NewKnoksHandler(logger, knokRepo),
+		adminPlatformHandler: handlers.NewAdminPlatformHandler(platformRepo, platformLoader, logger),
+		adminAuth:            middleware.NewAdminAuth(logger),
 	}
 }
 
@@ -42,10 +62,24 @@ func (r *Router) SetupRoutes() http.Handler {
 	// API v1 routes - Stats
 	r.mux.HandleFunc("GET /api/v1/stats", r.statsHandler.HandleStats)
 
-	// API v1 routes - Get recent knoks, search knoks, all for one server
-	r.mux.HandleFunc("GET /api/v1/knoks/server/{serverId}", r.knoksHandler.GetKnoksByServer)
+	// API v1 routes - Get recent knoks (global and per-server)
+	r.mux.HandleFunc("GET /api/v1/knoks", r.knoksHandler.GetKnoks)                       // Global timeline
+	r.mux.HandleFunc("GET /api/v1/knoks/server/{serverId}", r.knoksHandler.GetKnoksByServer) // Server-specific
 	r.mux.HandleFunc("GET /api/v1/knoks/search", r.knoksHandler.SearchKnoks)
 	r.mux.HandleFunc("GET /api/v1/knoks/random", r.knoksHandler.GetRandomKnok)
+
+	// API v1 routes - Admin endpoints for managing knoks
+	r.mux.HandleFunc("DELETE /api/v1/knoks/{id}", r.knoksHandler.DeleteKnok)
+	r.mux.HandleFunc("PATCH /api/v1/knoks/{id}", r.knoksHandler.UpdateKnok)
+
+	// Admin platform management endpoints (protected by auth middleware)
+	r.mux.Handle("GET /api/v1/admin/platforms", r.adminAuth.Middleware(http.HandlerFunc(r.adminPlatformHandler.ListPlatforms)))
+	r.mux.Handle("POST /api/v1/admin/platforms", r.adminAuth.Middleware(http.HandlerFunc(r.adminPlatformHandler.CreatePlatform)))
+	r.mux.Handle("PUT /api/v1/admin/platforms/{id}", r.adminAuth.Middleware(http.HandlerFunc(r.adminPlatformHandler.UpdatePlatform)))
+	r.mux.Handle("PATCH /api/v1/admin/platforms/{id}", r.adminAuth.Middleware(http.HandlerFunc(r.adminPlatformHandler.PatchPlatform)))
+	r.mux.Handle("DELETE /api/v1/admin/platforms/{id}", r.adminAuth.Middleware(http.HandlerFunc(r.adminPlatformHandler.DeletePlatform)))
+	r.mux.Handle("POST /api/v1/admin/platforms/refresh", r.adminAuth.Middleware(http.HandlerFunc(r.adminPlatformHandler.RefreshCache)))
+
 	// Add CORS middleware
 	return middleware.CORS(r.mux)
 }

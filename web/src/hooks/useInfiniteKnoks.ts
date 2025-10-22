@@ -4,7 +4,6 @@ import { apiClient } from "../api/client";
 import type { KnokDto } from "../api/types";
 
 interface UseInfiniteKnoksOptions {
-  serverId: string;
   searchQuery?: string;
   enabled?: boolean;
 }
@@ -20,7 +19,6 @@ interface UseInfiniteKnoksResult {
 }
 
 export function useInfiniteKnoks({
-  serverId,
   searchQuery,
   enabled = true,
 }: UseInfiniteKnoksOptions): UseInfiniteKnoksResult {
@@ -28,11 +26,11 @@ export function useInfiniteKnoks({
   
   const isSearchMode = !!searchQuery;
 
-  // Infinite query for timeline knoks
+  // Infinite query for timeline knoks (global, all servers)
   const timelineQuery = useInfiniteQuery({
-    queryKey: ["infinite-knoks", serverId],
-    queryFn: ({ pageParam }) => 
-      apiClient.getKnoksByServer(serverId, pageParam, 25),
+    queryKey: ["infinite-knoks"], // No serverId - global timeline
+    queryFn: ({ pageParam }) =>
+      apiClient.getKnoks(pageParam, 25), // Global endpoint
     enabled: enabled && !isSearchMode,
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => {
@@ -43,10 +41,10 @@ export function useInfiniteKnoks({
     refetchOnWindowFocus: true, // Refetch when coming back to the page
   });
 
-  // Infinite query for search results
+  // Infinite query for search results (global, not server-specific)
   const searchQuery_infinite = useInfiniteQuery({
     queryKey: ["infinite-search", searchQuery],
-    queryFn: ({ pageParam }) => 
+    queryFn: ({ pageParam }) =>
       apiClient.searchKnoks(searchQuery!, pageParam),
     enabled: false, // Manual control with debouncing
     initialPageParam: undefined as string | undefined,

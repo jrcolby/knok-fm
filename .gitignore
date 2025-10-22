@@ -1,9 +1,14 @@
-# Binaries for programs and plugins
+# Go specific
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
+*.test
+*.out
+vendor/
+go.sum
+.DS_Store
 
 # Test binary, built with `go test -c`
 *.test
@@ -36,10 +41,17 @@ Thumbs.db
 # Log files
 *.log
 
-# Environment files
+# Environment variables
 .env
 .env.local
+.env.production
 .env.*.local
+.env.prod
+*.env
+!.env.example
+!.env.template
+!.env.prod.example
+!web/.env.example
 
 # Build output
 bin/
@@ -49,3 +61,47 @@ build/
 # Temporary files
 tmp/
 temp/ 
+
+# Vite/Node specific
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+
+# Secrets and credentials
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+credentials.json
+service-account.json
+secrets/
+config/local.yaml
+config/prod.yaml
+
+# Build outputs
+build/
+bin/
+tmp/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Database backups
+*.sql
+*.dump
+backup_*.sql
+backups/
+
+# Docker volumes (if running locally)
+postgres_data/
+redis_data/
+caddy_data/
+caddy_config/

@@ -32,6 +32,73 @@ func (s *BotService) onMessageCreate(session *discordgo.Session, message *discor
 		return
 	}
 
+	// Check global guild (server) restrictions from environment
+	if len(s.config.DiscordAllowedGuilds) > 0 {
+		allowed := false
+		for _, guildID := range s.config.DiscordAllowedGuilds {
+			if guildID == message.GuildID {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			s.logger.Debug("HANDLER_EXIT: Guild not in allowed list",
+				"handler_id", handlerID,
+				"guild_id", message.GuildID,
+				"allowed_guilds", s.config.DiscordAllowedGuilds,
+			)
+			return
+		}
+	}
+
+	// Check global channel restrictions from environment
+	if len(s.config.DiscordAllowedChannels) > 0 {
+		allowed := false
+		for _, channelID := range s.config.DiscordAllowedChannels {
+			if channelID == message.ChannelID {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			s.logger.Debug("HANDLER_EXIT: Channel not in global allowed list",
+				"handler_id", handlerID,
+				"channel_id", message.ChannelID,
+				"allowed_channels", s.config.DiscordAllowedChannels,
+			)
+			return
+		}
+	}
+
+	// Check if server has channel restrictions (per-server database settings)
+	if s.serverRepo != nil {
+		server, err := s.serverRepo.GetByID(context.Background(), message.GuildID)
+		if err == nil && server != nil && server.Settings != nil {
+			if allowedChannels, ok := server.Settings["allowed_channels"].([]interface{}); ok && len(allowedChannels) > 0 {
+				// Check if message channel is in allowed list
+				isAllowed := false
+				for _, ch := range allowedChannels {
+					if channelID, ok := ch.(string); ok && channelID == message.ChannelID {
+						isAllowed = true
+						break
+					}
+				}
+				if !isAllowed {
+					s.logger.Debug("Message from non-allowed channel, ignoring",
+						"handler_id", handlerID,
+						"channel_id", message.ChannelID,
+						"allowed_channels", allowedChannels,
+					)
+					return
+				}
+				s.logger.Debug("Message from allowed channel, processing",
+					"handler_id", handlerID,
+					"channel_id", message.ChannelID,
+				)
+			}
+		}
+	}
+
 	// Check if message contains any supported URLs
 	urls := s.extractURLs(message.Content)
 	if len(urls) == 0 {
@@ -106,8 +173,49 @@ func (s *BotService) processDetectedURL(message *discordgo.MessageCreate, urlInf
 		"process_id", processID,
 		"message_id", message.ID,
 		"url", urlInfo.URL,
+		"platform", urlInfo.Platform,
 		"goroutine_id", fmt.Sprintf("%p", &ctx), // Unique per goroutine
 	)
+
+	// Check if platform is unknown and handle according to server settings
+	if urlInfo.Platform == domain.PlatformUnknown {
+		// Get unknown platform mode (server override or global default)
+		mode := s.config.DefaultUnknownPlatformMode // Global default
+
+		// Check for server-specific override
+		if s.serverRepo != nil {
+			server, err := s.serverRepo.GetByID(ctx, message.GuildID)
+			if err == nil && server != nil && server.Settings != nil {
+				// Check for server-specific unknown_platform_mode setting
+				if serverMode, ok := server.Settings["unknown_platform_mode"].(string); ok {
+					mode = serverMode
+					s.logger.Debug("Using server-specific unknown platform mode",
+						"server_id", message.GuildID,
+						"mode", mode,
+					)
+				}
+			}
+		}
+
+		// If strict mode, reject unknown platforms
+		if mode == "strict" {
+			s.logger.Info("Rejecting unknown platform URL (strict mode)",
+				"url", urlInfo.URL,
+				"server_id", message.GuildID,
+				"message_id", message.ID,
+				"mode", mode,
+			)
+			return nil // Don't create knok, don't queue job
+		}
+
+		// Permissive mode: Continue processing with platform="unknown"
+		s.logger.Info("Accepting unknown platform URL (permissive mode)",
+			"url", urlInfo.URL,
+			"platform", urlInfo.Platform,
+			"server_id", message.GuildID,
+			"mode", mode,
+		)
+	}
 
 	// Check for existing knok by URL first (to avoid duplicates)
 	var knokID uuid.UUID

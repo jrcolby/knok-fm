@@ -59,13 +59,47 @@ dev-api: ## Run API server in development mode
 	echo "  REDIS_URL: redis://localhost:6379" && \
 	echo "  LOG_LEVEL: debug" && \
 	echo "  PORT: 8080" && \
-	echo "  DISCORD_TOKEN: $${DISCORD_TOKEN:0:20}... (API doesn't need this)" && \
+	echo "  ADMIN_API_KEY: $${ADMIN_API_KEY:+[SET]}$${ADMIN_API_KEY:-[NOT SET]}" && \
 	echo "🚀 Starting API service..." && \
 	DATABASE_URL="postgresql://dev:devpass@localhost:5432/knockfm?sslmode=disable" \
 	REDIS_URL="redis://localhost:6379" \
 	LOG_LEVEL="debug" \
 	PORT="8080" \
+	ADMIN_API_KEY="$$ADMIN_API_KEY" \
 	go run cmd/api/main.go
+
+seed-channel: ## Seed database from Discord channel (requires -channel and -guild flags)
+	@echo "🌱 Seeding from Discord channel..."
+	@echo "📋 Loading environment..."
+	@if [ -f .env ]; then echo "✅ Found .env file"; else echo "⚠️  No .env file found"; fi
+	@source .env 2>/dev/null || true && \
+	echo "🔑 Environment variables:" && \
+	echo "  DATABASE_URL: postgresql://dev:devpass@localhost:5432/knockfm?sslmode=disable" && \
+	echo "  REDIS_URL: redis://localhost:6379" && \
+	echo "  LOG_LEVEL: info" && \
+	echo "  DISCORD_TOKEN: $${DISCORD_TOKEN:0:20}..." && \
+	echo "" && \
+	echo "Usage: make seed-channel ARGS='-channel CHANNEL_ID -guild GUILD_ID [OPTIONS]'" && \
+	echo "Options:" && \
+	echo "  -channel ID    Discord channel ID (required)" && \
+	echo "  -guild ID      Discord server/guild ID (required)" && \
+	echo "  -limit N       Max messages to fetch (default: no limit)" && \
+	echo "  -batch N       Messages per API call (default: 100, max: 100)" && \
+	echo "  -before ID     Fetch messages before this message ID" && \
+	echo "  -after ID      Fetch messages after this message ID" && \
+	echo "  -dry-run       Preview without creating knoks" && \
+	echo "" && \
+	if [ -z "$(ARGS)" ]; then \
+		echo "❌ Error: ARGS not provided"; \
+		echo "Example: make seed-channel ARGS='-channel 123456789 -guild 987654321'"; \
+		exit 1; \
+	fi && \
+	echo "🚀 Starting seeder with args: $(ARGS)" && \
+	DATABASE_URL="postgresql://dev:devpass@localhost:5432/knockfm?sslmode=disable" \
+	REDIS_URL="redis://localhost:6379" \
+	LOG_LEVEL="info" \
+	DISCORD_TOKEN="$$DISCORD_TOKEN" \
+	go run cmd/seeder/main.go $(ARGS)
 
 build: ## Build all binaries
 	@echo "🔨 Building binaries..."
@@ -73,7 +107,8 @@ build: ## Build all binaries
 	go build -o bin/bot ./cmd/bot
 	go build -o bin/api ./cmd/api
 	go build -o bin/worker ./cmd/worker
-	@echo "✅ Built: bin/bot, bin/api, bin/worker"
+	go build -o bin/seeder ./cmd/seeder
+	@echo "✅ Built: bin/bot, bin/api, bin/worker, bin/seeder"
 
 test: ## Run tests
 	go test ./...

@@ -14,6 +14,12 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+// PlatformLoader defines the interface for loading platform configurations
+type PlatformLoader interface {
+	GetAllByPriority() ([]*domain.Platform, error)
+	IsLoaded() bool
+}
+
 // BotService handles Discord bot operations
 type BotService struct {
 	config      *config.Config
@@ -36,6 +42,7 @@ func New(
 	queueRepo domain.QueueRepository,
 	knokRepo domain.KnokRepository, // Optional - can be nil
 	serverRepo domain.ServerRepository,
+	platformLoader PlatformLoader,
 ) (*BotService, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -45,7 +52,7 @@ func New(
 		queueRepo:   queueRepo,
 		knokRepo:    knokRepo,
 		serverRepo:  serverRepo,
-		urlDetector: urldetector.New(),
+		urlDetector: urldetector.New(platformLoader, logger),
 		ctx:         ctx,
 		cancel:      cancel,
 	}

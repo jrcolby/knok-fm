@@ -5,18 +5,28 @@ import (
 	"knock-fm/internal/config"
 	"knock-fm/internal/domain"
 	knokhttp "knock-fm/internal/http"
+	"knock-fm/internal/http/handlers"
 	"log/slog"
 	"net/http"
 	"time"
 )
 
+// PlatformLoader defines the interface for platform cache management
+type PlatformLoader interface {
+	Refresh(ctx context.Context) error
+	GetAll() ([]*domain.Platform, error)
+	Count() int
+}
+
 // APIService handles HTTP API requests
 type APIService struct {
-	config     *config.Config
-	logger     *slog.Logger
-	router     *knokhttp.Router
-	knokRepo   domain.KnokRepository
-	serverRepo domain.ServerRepository
+	config         *config.Config
+	logger         *slog.Logger
+	router         *knokhttp.Router
+	knokRepo       domain.KnokRepository
+	serverRepo     domain.ServerRepository
+	platformRepo   handlers.PlatformRepository
+	platformLoader PlatformLoader
 
 	// HTTP server
 	server *http.Server
@@ -28,15 +38,19 @@ func New(
 	logger *slog.Logger,
 	knokRepo domain.KnokRepository,
 	serverRepo domain.ServerRepository,
+	platformRepo handlers.PlatformRepository,
+	platformLoader PlatformLoader,
 ) (*APIService, error) {
-	router := knokhttp.NewRouter(logger, serverRepo, knokRepo)
+	router := knokhttp.NewRouter(logger, serverRepo, knokRepo, platformRepo, platformLoader)
 
 	apiService := &APIService{
-		config:     config,
-		logger:     logger,
-		router:     router,
-		knokRepo:   knokRepo,
-		serverRepo: serverRepo,
+		config:         config,
+		logger:         logger,
+		router:         router,
+		knokRepo:       knokRepo,
+		serverRepo:     serverRepo,
+		platformRepo:   platformRepo,
+		platformLoader: platformLoader,
 	}
 
 	// Create HTTP server with router and middleware

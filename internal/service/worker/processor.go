@@ -378,41 +378,54 @@ func (p *JobProcessor) extractMetadataWithRod(ctx context.Context, url string) (
 	if err := browser.Context(connectCtx).Connect(); err != nil {
 		return nil, fmt.Errorf("failed to connect to browser (timeout after 10s): %w", err)
 	}
-	defer browser.MustClose()
+	defer func() {
+		if err := browser.Close(); err != nil {
+			p.logger.Warn("Failed to close browser", "error", err)
+		}
+	}()
 	p.logger.Info("Connected to browser successfully", "url", url)
 
 	// Create page and navigate
 	p.logger.Info("Creating browser page", "url", url)
-	page := browser.MustPage()
-	defer page.MustClose()
+	page, err := browser.Page(proto.TargetCreateTarget{URL: ""})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create page: %w", err)
+	}
+	defer func() {
+		if err := page.Close(); err != nil {
+			p.logger.Warn("Failed to close page", "error", err)
+		}
+	}()
 
 	// Set user agent to avoid blocking
 	p.logger.Info("Setting user agent", "url", url)
-	page.MustSetUserAgent(&proto.NetworkSetUserAgentOverride{
+	if err := page.SetUserAgent(&proto.NetworkSetUserAgentOverride{
 		UserAgent: "Mozilla/5.0 (compatible; KnokFM/1.0)",
-	})
+	}); err != nil {
+		p.logger.Warn("Failed to set user agent", "error", err)
+	}
 
-	// Navigate to URL with simpler approach
+	// Navigate to URL with proper error handling
 	p.logger.Info("Navigating to URL", "url", url)
-	
+
 	// Use a more basic navigation approach with timeout
 	navCtx, navCancel := context.WithTimeout(rodCtx, 15*time.Second)
 	defer navCancel()
-	
-	if err := rod.Try(func() {
-		page.Context(navCtx).MustNavigate(url)
-		p.logger.Info("Page navigation completed", "url", url)
-		
-		// Simple wait for load
-		page.MustWaitLoad()
-		p.logger.Info("Page load completed", "url", url)
-		
-		// Wait a fixed amount of time for JavaScript to execute
-		time.Sleep(3 * time.Second)
-		p.logger.Info("JavaScript wait completed", "url", url)
-	}); err != nil {
+
+	if err := page.Context(navCtx).Navigate(url); err != nil {
 		return nil, fmt.Errorf("failed to navigate to page: %w", err)
 	}
+	p.logger.Info("Page navigation completed", "url", url)
+
+	// Simple wait for load
+	if err := page.WaitLoad(); err != nil {
+		return nil, fmt.Errorf("failed to wait for page load: %w", err)
+	}
+	p.logger.Info("Page load completed", "url", url)
+
+	// Wait a fixed amount of time for JavaScript to execute
+	time.Sleep(3 * time.Second)
+	p.logger.Info("JavaScript wait completed", "url", url)
 
 	// Get the rendered HTML
 	html, err := page.HTML()
@@ -450,50 +463,74 @@ func (p *JobProcessor) extractMetadataWithRod(ctx context.Context, url string) (
 	return metadata, nil
 }
 
-// extractMetadataWithRodSimple uses the simplest possible Rod approach
+// extractMetadataWithRodSimple uses the simplest possible Rod approach with proper error handling
 func (p *JobProcessor) extractMetadataWithRodSimple(ctx context.Context, url string) (map[string]string, error) {
 	p.logger.Info("Starting simple Rod metadata extraction", "url", url)
-	
+
 	// Create timeout context
 	rodCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	
+
 	// Use Rod's default browser (will download Chrome if needed)
-	browser := rod.New().Context(rodCtx).MustConnect()
-	defer browser.MustClose()
-	
+	browser := rod.New().Context(rodCtx)
+	if err := browser.Connect(); err != nil {
+		return nil, fmt.Errorf("failed to connect to browser: %w", err)
+	}
+	defer func() {
+		if err := browser.Close(); err != nil {
+			p.logger.Warn("Failed to close browser", "error", err)
+		}
+	}()
+
 	p.logger.Info("Rod browser connected", "url", url)
-	
-	// Navigate to page
-	page := browser.MustPage(url)
-	defer page.MustClose()
-	
+
+	// Create page
+	page, err := browser.Page(proto.TargetCreateTarget{URL: ""})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create page: %w", err)
+	}
+	defer func() {
+		if err := page.Close(); err != nil {
+			p.logger.Warn("Failed to close page", "error", err)
+		}
+	}()
+
+	// Navigate to URL with proper error handling
+	if err := page.Navigate(url); err != nil {
+		return nil, fmt.Errorf("failed to navigate to URL: %w", err)
+	}
+
 	p.logger.Info("Rod navigated to page", "url", url)
-	
-	// Wait for page load
-	page.MustWaitLoad()
+
+	// Wait for page load with error handling
+	if err := page.WaitLoad(); err != nil {
+		return nil, fmt.Errorf("failed to wait for page load: %w", err)
+	}
 	p.logger.Info("Rod page loaded", "url", url)
-	
+
 	// Wait for JavaScript (fixed time)
 	time.Sleep(3 * time.Second)
 	p.logger.Info("Rod wait completed", "url", url)
-	
-	// Get HTML
-	html := page.MustHTML()
+
+	// Get HTML with error handling
+	html, err := page.HTML()
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract HTML: %w", err)
+	}
 	p.logger.Info("Rod HTML extracted", "url", url, "length", len(html))
-	
+
 	// Parse metadata
 	metadata, err := p.extractOgMetadataFromHTML(strings.NewReader(html))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse HTML: %w", err)
 	}
-	
-	p.logger.Info("Rod metadata parsed", 
+
+	p.logger.Info("Rod metadata parsed",
 		"url", url,
 		"title", metadata["title"],
 		"description", metadata["description"],
 		"image", metadata["image"])
-	
+
 	return metadata, nil
 }
 

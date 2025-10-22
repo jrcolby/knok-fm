@@ -1,0 +1,54 @@
+# Frontend - knok-fm.com
+knok-fm.com, www.knok-fm.com {
+    # Redirect www to non-www
+    @www host www.knok-fm.com
+    redir @www https://knok-fm.com{uri} permanent
+
+    # Serve frontend
+    reverse_proxy web:80
+
+    # Enable gzip compression
+    encode gzip
+
+    # Security headers
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Logging
+    log {
+        output file /data/access.log
+        format json
+    }
+}
+
+# API - api.knok-fm.com
+api.knok-fm.com {
+    # Reverse proxy to API service
+    reverse_proxy api:8080
+
+    # Enable gzip compression
+    encode gzip
+
+    # CORS headers (adjust if needed)
+    header {
+        Access-Control-Allow-Origin "https://knok-fm.com"
+        Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type, Authorization"
+        X-Content-Type-Options "nosniff"
+    }
+
+    # Handle preflight requests
+    @cors_preflight {
+        method OPTIONS
+    }
+    respond @cors_preflight 204
+
+    # Logging
+    log {
+        output file /data/api-access.log
+        format json
+    }
+}

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"strings"
 )
 
 type Config struct {
@@ -13,6 +14,16 @@ type Config struct {
 	DiscordToken string
 	LogLevel     string
 	StaticDir    string
+
+	// Discord restrictions (optional)
+	DiscordAllowedGuilds   []string // Empty = allow all guilds
+	DiscordAllowedChannels []string // Empty = allow all channels (or use per-server settings)
+
+	// DefaultUnknownPlatformMode controls how the bot handles URLs from unrecognized platforms
+	// Values: "permissive" (accept all URLs) or "strict" (reject unknown platforms)
+	// Default: "permissive"
+	// Can be overridden per-server via server.settings JSONB field
+	DefaultUnknownPlatformMode string
 }
 
 func Load() *Config {
@@ -20,6 +31,13 @@ func Load() *Config {
 		Port:      getEnvWithDefault("PORT", "8080"),
 		LogLevel:  getEnvWithDefault("LOG_LEVEL", "info"),
 		StaticDir: getEnvWithDefault("STATIC_DIR", "./web/build"),
+
+		// Default to permissive mode (accept unknown platforms)
+		DefaultUnknownPlatformMode: getEnvWithDefault("UNKNOWN_PLATFORM_MODE", "permissive"),
+
+		// Discord restrictions (optional)
+		DiscordAllowedGuilds:   parseCommaSeparated(getEnvWithDefault("DISCORD_ALLOWED_GUILDS", "")),
+		DiscordAllowedChannels: parseCommaSeparated(getEnvWithDefault("DISCORD_ALLOWED_CHANNELS", "")),
 	}
 
 	// Required environment variables (for database/redis services)
@@ -50,6 +68,21 @@ func mustGetEnv(key string) string {
 		log.Fatalf("Environment variable %s is required", key)
 	}
 	return value
+}
+
+// parseCommaSeparated splits a comma-separated string and trims whitespace
+func parseCommaSeparated(value string) []string {
+	if value == "" {
+		return []string{}
+	}
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }
 
 // ValidateForBot ensures all required fields for bot service are present

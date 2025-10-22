@@ -1,5 +1,5 @@
 import React from "react";
-import { useParams, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 import { KnokCard } from "../components/KnokCard";
 import { useInfiniteKnoks } from "../hooks/useInfiniteKnoks";
 import { useIntersectionObserver } from "../hooks/useIntersectionObserver";
@@ -8,20 +8,15 @@ import { useContainerLayout } from "../hooks/useContainerLayout";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 
-const DEFAULT_SERVER_ID =
-  import.meta.env.VITE_SERVER_ID || "1404225099841667072";
-
 export function KnokTimeline() {
-  const { serverId } = useParams<{ serverId: string }>();
   const [searchParams] = useSearchParams();
-  const actualServerId = serverId || DEFAULT_SERVER_ID;
   const searchQuery = searchParams.get("q")?.trim() || "";
   const randomTrigger = searchParams.get("random");
 
   const isSearchMode = !!searchQuery;
   const isRandomMode = !!randomTrigger;
 
-  // Infinite scroll for timeline and search
+  // Infinite scroll for timeline and search (global, all servers)
   const {
     knoks,
     isLoading,
@@ -31,7 +26,6 @@ export function KnokTimeline() {
     fetchNextPage,
     refetch,
   } = useInfiniteKnoks({
-    serverId: actualServerId,
     searchQuery: isSearchMode ? searchQuery : undefined,
     enabled: !isRandomMode,
   });
@@ -116,7 +110,7 @@ export function KnokTimeline() {
                 : "An unknown error occurred"}
             </p>
             <button
-              onClick={() => isRandomMode ? refetchRandom() : refetch()}
+              onClick={() => (isRandomMode ? refetchRandom() : refetch())}
               className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
             >
               Try Again
@@ -182,7 +176,8 @@ export function KnokTimeline() {
                     : "You've reached the end"}
                 </div>
                 <div className="text-xs text-neutral-500 mt-1">
-                  {currentKnoks.length} knok{currentKnoks.length !== 1 ? "s" : ""} total
+                  {currentKnoks.length} knok
+                  {currentKnoks.length !== 1 ? "s" : ""} total
                 </div>
               </div>
             )}

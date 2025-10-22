@@ -60,6 +60,19 @@ class ApiClient {
     }
   }
 
+  // Get all knoks globally (across all servers)
+  async getKnoks(cursor?: string, limit: number = 25): Promise<KnoksResponse> {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    if (limit !== 25) params.set("limit", limit.toString());
+
+    const queryString = params.toString();
+    const endpoint = `/api/v1/knoks${queryString ? `?${queryString}` : ""}`;
+
+    return this.request<KnoksResponse>(endpoint);
+  }
+
+  // Get knoks for a specific server (kept for potential future use)
   async getKnoksByServer(
     serverId: string,
     cursor?: string,

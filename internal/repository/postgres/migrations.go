@@ -103,9 +103,60 @@ var migrations = []Migration{
 		SQL: `
 			-- Drop the old platform constraint
 			ALTER TABLE knoks DROP CONSTRAINT IF EXISTS knoks_platform_check;
-			
+
 			-- Add new platform constraint with all supported platforms
 			ALTER TABLE knoks ADD CONSTRAINT knoks_platform_check ` + domain.GetPlatformConstraintSQL() + `;
+		`,
+	},
+	{
+		Version: 3,
+		Name:    "create_platforms_table",
+		SQL: `
+			-- Create platforms table for centralized platform configuration
+			CREATE TABLE IF NOT EXISTS platforms (
+				id VARCHAR(50) PRIMARY KEY,
+				name VARCHAR(255) NOT NULL,
+				url_patterns TEXT[] NOT NULL DEFAULT '{}',
+				priority INTEGER DEFAULT 0,
+				enabled BOOLEAN DEFAULT true,
+				extraction_patterns JSONB,
+				created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+				updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+			);
+
+			-- Create index for enabled platforms
+			CREATE INDEX IF NOT EXISTS idx_platforms_enabled
+			ON platforms(enabled, priority DESC);
+		`,
+	},
+	{
+		Version: 4,
+		Name:    "seed_default_platforms",
+		SQL: `
+			-- Seed default music platforms (idempotent with ON CONFLICT)
+			INSERT INTO platforms (id, name, url_patterns, priority, enabled) VALUES
+				('youtube', 'YouTube', ARRAY['youtube.com', 'youtu.be', 'm.youtube.com', 'music.youtube.com'], 0, true),
+				('soundcloud', 'SoundCloud', ARRAY['soundcloud.com', 'on.soundcloud.com', 'm.soundcloud.com'], 0, true),
+				('spotify', 'Spotify', ARRAY['spotify.com', 'open.spotify.com', 'play.spotify.com', 'link.tospotify.com'], 0, true),
+				('apple_music', 'Apple Music', ARRAY['music.apple.com', 'itunes.apple.com'], 0, true),
+				('bandcamp', 'Bandcamp', ARRAY['bandcamp.com'], 0, true),
+				('mixcloud', 'Mixcloud', ARRAY['mixcloud.com'], 0, true),
+				('tidal', 'Tidal', ARRAY['tidal.com', 'listen.tidal.com'], 0, true),
+				('deezer', 'Deezer', ARRAY['deezer.com', 'deezer.page.link'], 0, true),
+				('nts', 'NTS Radio', ARRAY['nts.live'], 0, true),
+				('dublab', 'Dublab', ARRAY['dublab.com'], 0, true),
+				('noods', 'Noods Radio', ARRAY['noodsradio.com'], 0, true),
+				('rinse_fm', 'Rinse FM', ARRAY['rinse.fm', 'www.rinse.fm'], 0, true)
+			ON CONFLICT (id) DO NOTHING;
+		`,
+	},
+	{
+		Version: 5,
+		Name:    "remove_platform_constraint",
+		SQL: `
+			-- Remove hardcoded platform CHECK constraint to allow dynamic platforms
+			-- including 'unknown' and any new platforms added via database
+			ALTER TABLE knoks DROP CONSTRAINT IF EXISTS knoks_platform_check;
 		`,
 	},
 }

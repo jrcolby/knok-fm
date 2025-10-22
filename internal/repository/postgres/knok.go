@@ -507,6 +507,53 @@ func (r *KnokRepository) GetRecentByServer(ctx context.Context, serverID string,
 	return knoks, nil
 }
 
+// GetRecent gets recent knoks across all servers (global timeline)
+func (r *KnokRepository) GetRecent(ctx context.Context, cursor *time.Time, limit int) ([]*domain.Knok, error) {
+	r.logger.Info("GetRecent called (global)", "cursor", cursor, "limit", limit)
+
+	var query string
+	var args []interface{}
+
+	if cursor == nil {
+		query = knokSelectFields + `
+			WHERE extraction_status = 'complete'
+			ORDER BY posted_at DESC
+			LIMIT $1`
+		args = []interface{}{limit}
+	} else {
+		query = knokSelectFields + `
+			WHERE posted_at < $1 AND extraction_status = 'complete'
+			ORDER BY posted_at DESC
+			LIMIT $2`
+		args = []interface{}{*cursor, limit}
+	}
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		r.logger.Error("Failed to query recent knoks (global)", "error", err, "limit", limit)
+		return nil, fmt.Errorf("failed to query recent knoks: %w", err)
+	}
+	defer rows.Close()
+
+	var knoks []*domain.Knok
+	for rows.Next() {
+		knok, err := r.scanKnokRow(rows)
+		if err != nil {
+			r.logger.Error("Failed to scan knok", "error", err)
+			return nil, fmt.Errorf("failed to scan knok: %w", err)
+		}
+		knoks = append(knoks, knok)
+	}
+
+	if err := rows.Err(); err != nil {
+		r.logger.Error("Error occurred during rows iteration", "error", err)
+		return nil, fmt.Errorf("error occurred during rows iteration: %w", err)
+	}
+
+	r.logger.Debug("Recent knoks retrieved successfully (global)", "limit", limit, "knoks_count", len(knoks))
+	return knoks, nil
+}
+
 // GetByPlatform gets knoks filtered by platform within a server
 func (r *KnokRepository) GetByPlatform(ctx context.Context, serverID, platform string, offset, limit int) ([]*domain.Knok, int, error) {
 	r.logger.Info("GetByPlatform called (not implemented yet)",

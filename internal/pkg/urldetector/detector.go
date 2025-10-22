@@ -2,6 +2,7 @@ package urldetector
 
 import (
 	"knock-fm/internal/domain"
+	"log/slog"
 	"regexp"
 	"strings"
 	"sync"
@@ -13,8 +14,16 @@ type URLInfo struct {
 	Platform string
 }
 
-// Detector provides centralized URL detection using domain platform config
+// PlatformLoader defines the interface for loading platform configurations
+type PlatformLoader interface {
+	GetAllByPriority() ([]*domain.Platform, error)
+	IsLoaded() bool
+}
+
+// Detector provides centralized URL detection using platform loader
 type Detector struct {
+	loader   PlatformLoader
+	logger   *slog.Logger
 	patterns []compiledPattern
 	mu       sync.RWMutex
 }
@@ -24,22 +33,40 @@ type compiledPattern struct {
 	platform string
 }
 
-// New creates a new URL detector using the centralized platform configuration
-func New() *Detector {
-	detector := &Detector{}
+// New creates a new URL detector using the platform loader
+func New(loader PlatformLoader, logger *slog.Logger) *Detector {
+	detector := &Detector{
+		loader: loader,
+		logger: logger,
+	}
 	detector.buildPatterns()
 	return detector
 }
 
-// buildPatterns generates optimized regex patterns from domain platform config
+// buildPatterns generates optimized regex patterns from platform loader
 func (d *Detector) buildPatterns() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	config := domain.GetPlatformConfig()
+	// Check if loader has loaded platforms
+	if !d.loader.IsLoaded() {
+		d.logger.Warn("Platform loader not ready, patterns not built yet")
+		d.patterns = make([]compiledPattern, 0)
+		return
+	}
+
+	// Get platforms sorted by priority (highest first)
+	platforms, err := d.loader.GetAllByPriority()
+	if err != nil {
+		d.logger.Error("Failed to get platforms from loader", "error", err)
+		d.patterns = make([]compiledPattern, 0)
+		return
+	}
+
 	d.patterns = make([]compiledPattern, 0)
 
-	for platformID, platform := range config.Platforms {
+	// Build patterns for each platform (respecting priority order)
+	for _, platform := range platforms {
 		for _, urlPattern := range platform.URLPatterns {
 			// Build comprehensive regex pattern that handles:
 			// - Optional protocols (http/https)
@@ -47,15 +74,20 @@ func (d *Detector) buildPatterns() {
 			// - Exact domain matching
 			// - Word boundaries to avoid false positives
 			regexPattern := d.buildRegexPattern(urlPattern)
-			
+
 			if compiled, err := regexp.Compile(regexPattern); err == nil {
 				d.patterns = append(d.patterns, compiledPattern{
 					regex:    compiled,
-					platform: platformID,
+					platform: platform.ID,
 				})
 			}
 		}
 	}
+
+	d.logger.Info("Built URL detection patterns",
+		"platform_count", len(platforms),
+		"pattern_count", len(d.patterns),
+	)
 }
 
 // buildRegexPattern creates an optimized regex from a simple URL pattern
@@ -85,7 +117,14 @@ func (d *Detector) buildRegexPattern(urlPattern string) string {
 	}
 }
 
-// DetectURLs finds all supported music URLs in content and returns them with platform info
+// DetectURLs finds all supported music URLs in content and returns them with platform info.
+// Uses a multi-stage approach to handle various URL formats:
+// - Stage 1: Markdown links [text](url)
+// - Stage 2: Discord suppressed embeds <https://...>
+// - Stage 3: Standard URLs (http/https with full pattern matching)
+// - Stage 4: Plain domains (no protocol, known platforms only)
+// - Stage 5: Multi-line URLs (Discord wrapping)
+// All mobile/short link patterns are now handled by platform URLPatterns from the database.
 func (d *Detector) DetectURLs(content string) []URLInfo {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
@@ -93,33 +132,103 @@ func (d *Detector) DetectURLs(content string) []URLInfo {
 	var urls []URLInfo
 	seen := make(map[string]bool)
 
-	// Split content into words and check each for URL patterns
-	words := strings.Fields(content)
-	for _, word := range words {
-		for _, pattern := range d.patterns {
-			if pattern.regex.MatchString(word) {
-				// Clean up the URL (remove any trailing punctuation)
-				url := strings.TrimRight(word, ".,!?;:")
+	// Stage 1: Extract Markdown Links [text](url)
+	markdownRegex := regexp.MustCompile(`\[([^\]]+)\]\(([^)]+)\)`)
+	for _, match := range markdownRegex.FindAllStringSubmatch(content, -1) {
+		if len(match) > 2 {
+			d.addIfSupported(match[2], &urls, seen)
+		}
+	}
 
-				// Avoid duplicates
-				if !seen[url] {
-					seen[url] = true
-					urls = append(urls, URLInfo{
-						URL:      url,
-						Platform: d.detectPlatformFromURL(url),
-					})
-				}
-				break
-			}
+	// Remove markdown from content to avoid duplicate detection
+	cleanContent := markdownRegex.ReplaceAllString(content, " ")
+
+	// Stage 2: Extract Discord Suppressed Embeds <https://...>
+	suppressedRegex := regexp.MustCompile(`<(https?://[^>]+)>`)
+	cleanContent = suppressedRegex.ReplaceAllStringFunc(cleanContent, func(s string) string {
+		url := s[1 : len(s)-1] // Remove angle brackets
+		d.addIfSupported(url, &urls, seen)
+		return " " // Replace with space to avoid re-detection
+	})
+
+	// Stage 3: Extract Standard URLs (comprehensive pattern)
+	// Matches http(s):// URLs with domain, path, query, fragment
+	urlRegex := regexp.MustCompile(
+		`(?i)https?://[\w\-]+(?:\.[\w\-]+)+(?:/[^\s<>\[\]()]*)?(?:\?[^\s<>\[\]()]*)?(?:#[^\s<>\[\]()]*)?`,
+	)
+
+	for _, match := range urlRegex.FindAllString(cleanContent, -1) {
+		cleaned := cleanTrailingPunctuation(match)
+		d.addIfSupported(cleaned, &urls, seen)
+	}
+
+	// Stage 4: Extract Plain Domains (no protocol)
+	// Common case: "spotify.com/track/..." or "www.youtube.com/watch?v=..."
+	// Only match known music platform domains to avoid false positives
+	domainRegex := regexp.MustCompile(
+		`(?i)(?:^|\s)((?:www\.)?(?:spotify|youtube|youtu|soundcloud|bandcamp|mixcloud|tidal|deezer|apple)\.(?:com|be|fm|live)(?:/[^\s<>\[\]()]*)?)`,
+	)
+
+	for _, match := range domainRegex.FindAllStringSubmatch(cleanContent, -1) {
+		if len(match) > 1 {
+			cleaned := cleanTrailingPunctuation(match[1])
+			d.addIfSupported(cleaned, &urls, seen)
+		}
+	}
+
+	// Stage 5: Handle Multi-line URLs (Discord wrapping)
+	// Discord sometimes wraps long URLs across lines
+	if strings.Contains(content, "\n") {
+		unwrappedContent := strings.ReplaceAll(content, "\n", "")
+		// Re-run URL detection on unwrapped content (just the generic pattern)
+		for _, match := range urlRegex.FindAllString(unwrappedContent, -1) {
+			cleaned := cleanTrailingPunctuation(match)
+			d.addIfSupported(cleaned, &urls, seen)
 		}
 	}
 
 	return urls
 }
 
-// detectPlatformFromURL uses the domain's centralized platform detection
+// addIfSupported normalizes a URL, detects its platform, and adds it to the results if valid.
+// This helper prevents duplicates and ensures all URLs are properly normalized.
+func (d *Detector) addIfSupported(rawURL string, urls *[]URLInfo, seen map[string]bool) {
+	// Normalize the URL for canonical form and deduplication
+	normalizedURL, err := NormalizeURL(rawURL)
+	if err != nil {
+		// Invalid URL, skip it
+		return
+	}
+
+	// Check for duplicates using normalized form
+	if seen[normalizedURL] {
+		return
+	}
+
+	// Detect platform using normalized URL
+	platform := d.detectPlatformFromURL(normalizedURL)
+
+	// Add to results (including unknown platforms)
+	seen[normalizedURL] = true
+	*urls = append(*urls, URLInfo{
+		URL:      normalizedURL,
+		Platform: platform,
+	})
+}
+
+// detectPlatformFromURL detects platform using database-loaded patterns
+// Note: This is called from addIfSupported which already holds a read lock,
+// so we don't acquire another lock here to avoid deadlock
 func (d *Detector) detectPlatformFromURL(url string) string {
-	return domain.DetectPlatformFromURL(url)
+	// Use the compiled patterns from the database (respects priority)
+	for _, pattern := range d.patterns {
+		if pattern.regex.MatchString(url) {
+			return pattern.platform
+		}
+	}
+
+	// No match found - return unknown
+	return domain.PlatformUnknown
 }
 
 // IsSupported checks if a URL matches any supported platform pattern
@@ -135,9 +244,20 @@ func (d *Detector) IsSupported(url string) bool {
 	return false
 }
 
-// GetSupportedPlatforms returns a list of all supported platform IDs
+// GetSupportedPlatforms returns a list of all supported platform IDs from the loader
 func (d *Detector) GetSupportedPlatforms() []string {
-	return domain.GetValidPlatforms()
+	platforms, err := d.loader.GetAllByPriority()
+	if err != nil {
+		d.logger.Warn("Failed to get platforms from loader", "error", err)
+		return []string{}
+	}
+
+	platformIDs := make([]string, 0, len(platforms))
+	for _, platform := range platforms {
+		platformIDs = append(platformIDs, platform.ID)
+	}
+
+	return platformIDs
 }
 
 // Refresh rebuilds patterns from the current domain configuration

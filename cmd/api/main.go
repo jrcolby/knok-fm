@@ -8,6 +8,7 @@ import (
 	"knock-fm/internal/pkg/logger"
 	"knock-fm/internal/repository/postgres"
 	"knock-fm/internal/service/api"
+	"knock-fm/internal/service/platforms"
 	"os"
 	"os/signal"
 	"syscall"
@@ -53,9 +54,21 @@ func main() {
 	// Create repositories
 	knokRepo := postgres.NewKnokRepository(db, log)
 	serverRepo := postgres.NewServerRepository(db, log)
+	platformRepo := postgres.NewPlatformRepository(db, log)
+
+	// Create and load platform loader
+	platformLoader := platforms.NewLoader(platformRepo, log)
+	ctx := context.Background()
+	if err := platformLoader.Load(ctx); err != nil {
+		log.Error("Failed to load platforms", "error", err)
+		os.Exit(1)
+	}
+	log.Info("Platform loader initialized",
+		"platform_count", platformLoader.Count(),
+	)
 
 	// Create API service
-	apiService, err := api.New(cfg, log, knokRepo, serverRepo)
+	apiService, err := api.New(cfg, log, knokRepo, serverRepo, platformRepo, platformLoader)
 	if err != nil {
 		log.Error("Failed to create API service", "error", err)
 		os.Exit(1)

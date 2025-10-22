@@ -9,6 +9,7 @@ import (
 	"knock-fm/internal/repository/postgres"
 	"knock-fm/internal/repository/redis"
 	"knock-fm/internal/service/bot"
+	"knock-fm/internal/service/platforms"
 	"os"
 	"os/signal"
 	"syscall"
@@ -69,9 +70,21 @@ func main() {
 	queueRepo := redis.NewQueueRepository(redisClient, log)
 	knokRepo := postgres.NewKnokRepository(db, log)
 	serverRepo := postgres.NewServerRepository(db, log)
+	platformRepo := postgres.NewPlatformRepository(db, log)
+
+	// Create and load platform loader
+	platformLoader := platforms.NewLoader(platformRepo, log)
+	ctx := context.Background()
+	if err := platformLoader.Load(ctx); err != nil {
+		log.Error("Failed to load platforms", "error", err)
+		os.Exit(1)
+	}
+	log.Info("Platform loader initialized",
+		"platform_count", platformLoader.Count(),
+	)
 
 	// Create bot service
-	botService, err := bot.New(cfg, log, queueRepo, knokRepo, serverRepo)
+	botService, err := bot.New(cfg, log, queueRepo, knokRepo, serverRepo, platformLoader)
 	if err != nil {
 		log.Error("Failed to create bot service", "error", err)
 		os.Exit(1)
