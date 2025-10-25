@@ -11,6 +11,7 @@ import (
 	"knock-fm/internal/pkg/urldetector"
 	"knock-fm/internal/repository/postgres"
 	"knock-fm/internal/repository/redis"
+	"knock-fm/internal/service/platforms"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -121,10 +122,20 @@ func main() {
 	// Create repositories
 	knokRepo := postgres.NewKnokRepository(db, log)
 	serverRepo := postgres.NewServerRepository(db, log)
+	platformRepo := postgres.NewPlatformRepository(db, log)
 	queueRepo := redis.NewQueueRepository(redisClient, log)
 
+	// Create and load platform loader
+	platformLoader := platforms.NewLoader(platformRepo, log)
+	ctx := context.Background()
+	if err := platformLoader.Load(ctx); err != nil {
+		log.Error("Failed to load platforms", "error", err)
+		os.Exit(1)
+	}
+	log.Info("Platform loader initialized", "platform_count", platformLoader.Count())
+
 	// Create URL detector
-	urlDet := urldetector.New()
+	urlDet := urldetector.New(platformLoader, log)
 
 	// Create seeder
 	seeder := &Seeder{
