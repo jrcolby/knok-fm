@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Search, X } from "lucide-react";
-import type { KnokDto } from "../api/types";
-import { QueryClient, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/api/client";
 export function SearchComponent() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);

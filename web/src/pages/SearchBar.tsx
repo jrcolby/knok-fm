@@ -1,5 +1,3 @@
-import { Search } from "lucide-react";
-
 export function SearchBar() {
   return (
     <div className="max-w-xl mx-auto p-8">

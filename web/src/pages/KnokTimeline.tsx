@@ -1,4 +1,4 @@
-import React from "react";
+import { useEffect } from "react";
 import { useSearchParams } from "react-router";
 import { KnokCard } from "../components/KnokCard";
 import { useInfiniteKnoks } from "../hooks/useInfiniteKnoks";
@@ -51,7 +51,7 @@ export function KnokTimeline() {
   });
 
   // Trigger random fetch when randomTrigger changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (randomTrigger) {
       refetchRandom();
     }
