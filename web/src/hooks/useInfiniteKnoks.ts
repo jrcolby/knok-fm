@@ -37,7 +37,7 @@ export function useInfiniteKnoks({
       // Return the cursor for the next page, or undefined if no more pages
       return lastPage.has_more ? lastPage.cursor : undefined;
     },
-    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+    staleTime: 0, // Always refetch on window focus
     refetchOnWindowFocus: true, // Refetch when coming back to the page
   });
 
