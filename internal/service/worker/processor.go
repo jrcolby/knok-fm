@@ -351,6 +351,7 @@ func (p *JobProcessor) extractMetadataWithRod(ctx context.Context, url string) (
 
 	// Launch headless browser with proper flags for JavaScript execution
 	l := launcher.New().
+		Bin("/usr/bin/chromium-browser"). // Use system Chromium in Alpine
 		Headless(true).
 		Set("no-sandbox").
 		Set("disable-web-security").
@@ -358,11 +359,7 @@ func (p *JobProcessor) extractMetadataWithRod(ctx context.Context, url string) (
 		Set("disable-extensions").
 		Set("disable-plugins")
 
-	// Try to find browser binary explicitly
-	if path, exists := launcher.LookPath(); exists {
-		l = l.Bin(path)
-		p.logger.Info("Found browser binary", "path", path)
-	}
+	p.logger.Info("Using Chromium browser", "path", "/usr/bin/chromium-browser")
 
 	defer l.Cleanup()
 
