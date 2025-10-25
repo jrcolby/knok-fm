@@ -32,19 +32,10 @@ api.knok-fm.com {
     # Enable gzip compression
     encode gzip
 
-    # CORS headers (adjust if needed)
+    # Security headers (CORS is handled by Go API middleware)
     header {
-        Access-Control-Allow-Origin "https://knok-fm.com"
-        Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-        Access-Control-Allow-Headers "Content-Type, Authorization"
         X-Content-Type-Options "nosniff"
     }
-
-    # Handle preflight requests
-    @cors_preflight {
-        method OPTIONS
-    }
-    respond @cors_preflight 204
 
     # Logging
     log {
