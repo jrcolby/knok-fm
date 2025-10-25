@@ -27,7 +27,9 @@ COPY --from=builder /build/worker .
 RUN adduser -D -u 1000 appuser
 USER appuser
 
+# Set environment variables for Rod to find Chromium
 ENV CHROME_BIN=/usr/bin/chromium-browser
 ENV CHROME_PATH=/usr/lib/chromium/
+ENV ROD_LAUNCHER=/usr/bin/chromium-browser
 
 CMD ["./worker"]

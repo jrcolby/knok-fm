@@ -350,21 +350,28 @@ func (p *JobProcessor) extractMetadataWithRod(ctx context.Context, url string) (
 	defer cancel()
 
 	// Launch headless browser with proper flags for JavaScript execution
-	launcher := launcher.New().
+	l := launcher.New().
 		Headless(true).
 		Set("no-sandbox").
 		Set("disable-web-security").
 		Set("disable-features", "VizDisplayCompositor").
 		Set("disable-extensions").
 		Set("disable-plugins")
-	defer launcher.Cleanup()
+
+	// Try to find browser binary explicitly
+	if path, exists := launcher.LookPath(); exists {
+		l = l.Bin(path)
+		p.logger.Info("Found browser binary", "path", path)
+	}
+
+	defer l.Cleanup()
 
 	// Add timeout for browser launch
 	launchCtx, launchCancel := context.WithTimeout(rodCtx, 15*time.Second)
 	defer launchCancel()
 
 	p.logger.Info("Launching browser with Rod", "url", url)
-	controlURL, err := launcher.Context(launchCtx).Launch()
+	controlURL, err := l.Context(launchCtx).Launch()
 	if err != nil {
 		return nil, fmt.Errorf("failed to launch browser (timeout after 15s): %w", err)
 	}
