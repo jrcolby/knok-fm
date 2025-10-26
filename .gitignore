@@ -58,6 +58,12 @@ bin/
 dist/
 build/
 
+# Binaries (in case built in root by accident)
+/api
+/bot
+/worker
+/seeder
+
 # Temporary files
 tmp/
 temp/ 

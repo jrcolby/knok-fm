@@ -143,3 +143,50 @@ dev: dev-services setup-env ## Full development setup
 	@echo "1. Edit .env and set your DISCORD_TOKEN"
 	@echo "2. Run 'make dev-api' to start API server"
 	@echo "3. Run 'make dev-bot' to start Discord bot"
+
+# Production deployment commands
+deploy: ## Deploy to production (rebuild and restart all services)
+	@echo "🚀 Deploying to production..."
+	ssh knokfm 'cd ~/knok-fm && git pull origin main && docker compose -f docker-compose.prod.yml build && docker compose -f docker-compose.prod.yml up -d'
+	@echo "✅ Deployment complete!"
+
+deploy-worker: ## Deploy only worker service
+	@echo "⚙️  Deploying worker..."
+	ssh knokfm 'cd ~/knok-fm && git pull origin main && docker compose -f docker-compose.prod.yml build worker && docker compose -f docker-compose.prod.yml up -d worker'
+	@echo "✅ Worker deployed!"
+
+deploy-web: ## Deploy only web service
+	@echo "🌐 Deploying web..."
+	ssh knokfm 'cd ~/knok-fm && git pull origin main && docker compose -f docker-compose.prod.yml build web && docker compose -f docker-compose.prod.yml up -d web'
+	@echo "✅ Web deployed!"
+
+logs: ## Tail production logs (all services)
+	ssh knokfm 'cd ~/knok-fm && docker compose -f docker-compose.prod.yml logs -f'
+
+logs-worker: ## Tail worker logs
+	ssh knokfm 'cd ~/knok-fm && docker compose -f docker-compose.prod.yml logs -f worker'
+
+logs-bot: ## Tail bot logs
+	ssh knokfm 'cd ~/knok-fm && docker compose -f docker-compose.prod.yml logs -f bot'
+
+logs-api: ## Tail API logs
+	ssh knokfm 'cd ~/knok-fm && docker compose -f docker-compose.prod.yml logs -f api'
+
+prod-restart: ## Restart all production services
+	@echo "🔄 Restarting services..."
+	ssh knokfm 'cd ~/knok-fm && docker compose -f docker-compose.prod.yml restart'
+	@echo "✅ Services restarted!"
+
+prod-status: ## Show production service status
+	ssh knokfm 'cd ~/knok-fm && docker compose -f docker-compose.prod.yml ps'
+
+prod-nuke: ## Nuke database and reseed (DESTRUCTIVE!)
+	@echo "⚠️  WARNING: This will delete all data!"
+	@read -p "Are you sure? Type 'yes' to continue: " confirm && [ "$$confirm" = "yes" ] || exit 1
+	@echo "💥 Nuking database..."
+	ssh knokfm 'cd ~/knok-fm && docker compose -f docker-compose.prod.yml down && docker volume rm knok-fm_postgres_data && docker compose -f docker-compose.prod.yml up -d'
+	@echo "⏳ Waiting for services to start..."
+	@sleep 10
+	@echo "🌱 Seeding database..."
+	ssh knokfm 'cd ~/knok-fm && docker compose -f docker-compose.prod.yml exec api ./seeder -channel 1326223196126449804 -guild 1322276431471968356 -limit 0'
+	@echo "✅ Database nuked and reseeded!"
