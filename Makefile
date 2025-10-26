@@ -144,49 +144,76 @@ dev: dev-services setup-env ## Full development setup
 	@echo "2. Run 'make dev-api' to start API server"
 	@echo "3. Run 'make dev-bot' to start Discord bot"
 
-# Production deployment commands
-deploy: ## Deploy to production (rebuild and restart all services)
+# Production deployment commands (configure via environment variables)
+# Create a .env.prod.local file (gitignored) with your settings:
+#   PROD_SSH_HOST - SSH host (e.g., user@yourserver.com or ssh alias)
+#   PROD_APP_DIR - Path to app on server (default: ~/knok-fm)
+#   DISCORD_GUILD_ID - Your Discord server ID for seeding
+#   DISCORD_CHANNEL_ID - Your Discord channel ID for seeding
+
+# Load .env.prod.local if it exists (gitignored)
+-include .env.prod.local
+export
+
+PROD_SSH_HOST ?= $(shell echo $$PROD_SSH_HOST)
+PROD_APP_DIR ?= ~/knok-fm
+DISCORD_GUILD_ID ?= $(shell echo $$DISCORD_GUILD_ID)
+DISCORD_CHANNEL_ID ?= $(shell echo $$DISCORD_CHANNEL_ID)
+
+check-prod-config:
+	@if [ -z "$(PROD_SSH_HOST)" ]; then \
+		echo "❌ Error: PROD_SSH_HOST not set"; \
+		echo "Set it in your environment: export PROD_SSH_HOST=user@yourserver.com"; \
+		exit 1; \
+	fi
+
+deploy: check-prod-config ## Deploy to production (rebuild and restart all services)
 	@echo "🚀 Deploying to production..."
-	ssh knokfm 'cd ~/knok-fm && git pull origin main && docker compose -f docker-compose.prod.yml build && docker compose -f docker-compose.prod.yml up -d'
+	ssh $(PROD_SSH_HOST) 'cd $(PROD_APP_DIR) && git pull origin main && docker compose -f docker-compose.prod.yml build && docker compose -f docker-compose.prod.yml up -d'
 	@echo "✅ Deployment complete!"
 
-deploy-worker: ## Deploy only worker service
+deploy-worker: check-prod-config ## Deploy only worker service
 	@echo "⚙️  Deploying worker..."
-	ssh knokfm 'cd ~/knok-fm && git pull origin main && docker compose -f docker-compose.prod.yml build worker && docker compose -f docker-compose.prod.yml up -d worker'
+	ssh $(PROD_SSH_HOST) 'cd $(PROD_APP_DIR) && git pull origin main && docker compose -f docker-compose.prod.yml build worker && docker compose -f docker-compose.prod.yml up -d worker'
 	@echo "✅ Worker deployed!"
 
-deploy-web: ## Deploy only web service
+deploy-web: check-prod-config ## Deploy only web service
 	@echo "🌐 Deploying web..."
-	ssh knokfm 'cd ~/knok-fm && git pull origin main && docker compose -f docker-compose.prod.yml build web && docker compose -f docker-compose.prod.yml up -d web'
+	ssh $(PROD_SSH_HOST) 'cd $(PROD_APP_DIR) && git pull origin main && docker compose -f docker-compose.prod.yml build web && docker compose -f docker-compose.prod.yml up -d web'
 	@echo "✅ Web deployed!"
 
-logs: ## Tail production logs (all services)
-	ssh knokfm 'cd ~/knok-fm && docker compose -f docker-compose.prod.yml logs -f'
+logs: check-prod-config ## Tail production logs (all services)
+	ssh $(PROD_SSH_HOST) 'cd $(PROD_APP_DIR) && docker compose -f docker-compose.prod.yml logs -f'
 
-logs-worker: ## Tail worker logs
-	ssh knokfm 'cd ~/knok-fm && docker compose -f docker-compose.prod.yml logs -f worker'
+logs-worker: check-prod-config ## Tail worker logs
+	ssh $(PROD_SSH_HOST) 'cd $(PROD_APP_DIR) && docker compose -f docker-compose.prod.yml logs -f worker'
 
-logs-bot: ## Tail bot logs
-	ssh knokfm 'cd ~/knok-fm && docker compose -f docker-compose.prod.yml logs -f bot'
+logs-bot: check-prod-config ## Tail bot logs
+	ssh $(PROD_SSH_HOST) 'cd $(PROD_APP_DIR) && docker compose -f docker-compose.prod.yml logs -f bot'
 
-logs-api: ## Tail API logs
-	ssh knokfm 'cd ~/knok-fm && docker compose -f docker-compose.prod.yml logs -f api'
+logs-api: check-prod-config ## Tail API logs
+	ssh $(PROD_SSH_HOST) 'cd $(PROD_APP_DIR) && docker compose -f docker-compose.prod.yml logs -f api'
 
-prod-restart: ## Restart all production services
+prod-restart: check-prod-config ## Restart all production services
 	@echo "🔄 Restarting services..."
-	ssh knokfm 'cd ~/knok-fm && docker compose -f docker-compose.prod.yml restart'
+	ssh $(PROD_SSH_HOST) 'cd $(PROD_APP_DIR) && docker compose -f docker-compose.prod.yml restart'
 	@echo "✅ Services restarted!"
 
-prod-status: ## Show production service status
-	ssh knokfm 'cd ~/knok-fm && docker compose -f docker-compose.prod.yml ps'
+prod-status: check-prod-config ## Show production service status
+	ssh $(PROD_SSH_HOST) 'cd $(PROD_APP_DIR) && docker compose -f docker-compose.prod.yml ps'
 
-prod-nuke: ## Nuke database and reseed (DESTRUCTIVE!)
+prod-nuke: check-prod-config ## Nuke database and reseed (DESTRUCTIVE!)
+	@if [ -z "$(DISCORD_GUILD_ID)" ] || [ -z "$(DISCORD_CHANNEL_ID)" ]; then \
+		echo "❌ Error: DISCORD_GUILD_ID and DISCORD_CHANNEL_ID must be set for seeding"; \
+		echo "Set them in your environment or .env file"; \
+		exit 1; \
+	fi
 	@echo "⚠️  WARNING: This will delete all data!"
 	@read -p "Are you sure? Type 'yes' to continue: " confirm && [ "$$confirm" = "yes" ] || exit 1
 	@echo "💥 Nuking database..."
-	ssh knokfm 'cd ~/knok-fm && docker compose -f docker-compose.prod.yml down && docker volume rm knok-fm_postgres_data && docker compose -f docker-compose.prod.yml up -d'
+	ssh $(PROD_SSH_HOST) 'cd $(PROD_APP_DIR) && docker compose -f docker-compose.prod.yml down && docker volume rm knok-fm_postgres_data && docker compose -f docker-compose.prod.yml up -d'
 	@echo "⏳ Waiting for services to start..."
 	@sleep 10
 	@echo "🌱 Seeding database..."
-	ssh knokfm 'cd ~/knok-fm && docker compose -f docker-compose.prod.yml exec api ./seeder -channel 1326223196126449804 -guild 1322276431471968356 -limit 0'
+	ssh $(PROD_SSH_HOST) 'cd $(PROD_APP_DIR) && docker compose -f docker-compose.prod.yml exec api ./seeder -channel $(DISCORD_CHANNEL_ID) -guild $(DISCORD_GUILD_ID) -limit 0'
 	@echo "✅ Database nuked and reseeded!"
