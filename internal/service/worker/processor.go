@@ -25,6 +25,10 @@ type JobProcessor struct {
 	serverRepo domain.ServerRepository
 }
 
+const (
+	browserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
 // NewJobProcessor creates a new job processor
 func NewJobProcessor(
 	logger *slog.Logger,
@@ -165,6 +169,8 @@ func (p *JobProcessor) ProcessNotification(ctx context.Context, payload map[stri
 func (p *JobProcessor) extractOgMetadata(ctx context.Context, url string) (map[string]string, error) {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
+		// Follow redirects automatically
+		CheckRedirect: nil,
 	}
 
 	// Create request with context
@@ -173,8 +179,19 @@ func (p *JobProcessor) extractOgMetadata(ctx context.Context, url string) (map[s
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Set user agent to avoid blocking
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; KnokFM/1.0)")
+	// Set headers to mimic a real browser and avoid bot detection
+	req.Header.Set("User-Agent", browserUserAgent)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("DNT", "1")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Cache-Control", "max-age=0")
 
 	// Make the request
 	resp, err := client.Do(req)
@@ -266,6 +283,8 @@ func (p *JobProcessor) extractTitleFromURL(ctx context.Context, url string) (str
 	// Create HTTP client with timeout
 	client := &http.Client{
 		Timeout: 10 * time.Second,
+		// Follow redirects automatically
+		CheckRedirect: nil,
 	}
 
 	// Create request with context
@@ -274,8 +293,19 @@ func (p *JobProcessor) extractTitleFromURL(ctx context.Context, url string) (str
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Set user agent to avoid blocking
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; KnokFM/1.0)")
+	// Set headers to mimic a real browser and avoid bot detection
+	req.Header.Set("User-Agent", browserUserAgent)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("DNT", "1")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Cache-Control", "max-age=0")
 
 	// Make the request
 	resp, err := client.Do(req)
@@ -401,10 +431,10 @@ func (p *JobProcessor) extractMetadataWithRod(ctx context.Context, url string) (
 		}
 	}()
 
-	// Set user agent to avoid blocking
+	// Set user agent to mimic a real browser and avoid bot detection
 	p.logger.Info("Setting user agent", "url", url)
 	if err := page.SetUserAgent(&proto.NetworkSetUserAgentOverride{
-		UserAgent: "Mozilla/5.0 (compatible; KnokFM/1.0)",
+		UserAgent: browserUserAgent,
 	}); err != nil {
 		p.logger.Warn("Failed to set user agent", "error", err)
 	}
@@ -443,15 +473,15 @@ func (p *JobProcessor) extractMetadataWithRod(ctx context.Context, url string) (
 		htmlPreview = htmlPreview[:500] + "..."
 	}
 	p.logger.Debug("Rod HTML preview", "url", url, "html_start", htmlPreview)
-	
+
 	// Parse the rendered HTML using existing HTML parsing logic
 	metadata, err := p.extractOgMetadataFromHTML(strings.NewReader(html))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse metadata from rendered HTML: %w", err)
 	}
-	
+
 	// Debug: Log what metadata was found
-	p.logger.Debug("Rod metadata parsed", 
+	p.logger.Debug("Rod metadata parsed",
 		"url", url,
 		"metadata_count", len(metadata),
 		"has_title", metadata["title"] != "",
@@ -475,9 +505,30 @@ func (p *JobProcessor) extractMetadataWithRodSimple(ctx context.Context, url str
 	rodCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	// Use Rod's default browser (will download Chrome if needed)
-	browser := rod.New().Context(rodCtx)
-	if err := browser.Connect(); err != nil {
+	// Launch headless browser using system Chromium
+	l := launcher.New().
+		Bin("/usr/bin/chromium-browser"). // Use system Chromium in Alpine
+		Headless(true).
+		Set("no-sandbox").
+		Set("disable-web-security").
+		Set("disable-features", "VizDisplayCompositor").
+		Set("disable-extensions").
+		Set("disable-plugins")
+
+	p.logger.Info("Using Chromium browser", "path", "/usr/bin/chromium-browser")
+
+	defer l.Cleanup()
+
+	// Launch browser
+	controlURL, err := l.Context(rodCtx).Launch()
+	if err != nil {
+		return nil, fmt.Errorf("failed to launch browser: %w", err)
+	}
+	p.logger.Info("Browser launched successfully", "control_url", controlURL)
+
+	// Connect to browser
+	browser := rod.New().ControlURL(controlURL)
+	if err := browser.Context(rodCtx).Connect(); err != nil {
 		return nil, fmt.Errorf("failed to connect to browser: %w", err)
 	}
 	defer func() {
@@ -549,12 +600,12 @@ func (p *JobProcessor) extractMetadataWithFallbacks(ctx context.Context, url str
 		p.logger.Warn("HTTP metadata extraction failed", "error", err, "url", url)
 		httpMetadata = make(map[string]string)
 	}
-	
+
 	// Debug: Log what HTTP extraction found
-	p.logger.Info("HTTP metadata extraction results", 
+	p.logger.Info("HTTP metadata extraction results",
 		"url", url,
 		"title", httpMetadata["title"],
-		"description", httpMetadata["description"], 
+		"description", httpMetadata["description"],
 		"image", httpMetadata["image"],
 		"site_name", httpMetadata["site_name"],
 		"total_fields", len(httpMetadata))
@@ -591,7 +642,7 @@ func (p *JobProcessor) extractMetadataWithFallbacks(ctx context.Context, url str
 	// Tier 2: Rod Headless Browser (for JavaScript-rendered content)
 	p.logger.Info("Tier 2: Attempting Rod-based metadata extraction", "url", url)
 	rodMetadata, rodErr := p.extractMetadataWithRodSimple(ctx, url)
-	
+
 	if rodErr != nil {
 		p.logger.Warn("Rod metadata extraction skipped/failed", "error", rodErr, "url", url)
 	} else {
@@ -646,7 +697,7 @@ func (p *JobProcessor) extractMetadataWithFallbacks(ctx context.Context, url str
 		fallbackMetadata["description"] = url
 		p.logger.Debug("Using URL as description fallback in tier 3", "url", url)
 	}
-	
+
 	if httpMetadata["image"] != "" {
 		fallbackMetadata["image"] = httpMetadata["image"]
 	}
