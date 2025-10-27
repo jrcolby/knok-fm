@@ -20,9 +20,10 @@ import (
 
 // JobProcessor handles different types of background jobs
 type JobProcessor struct {
-	logger     *slog.Logger
-	knokRepo   domain.KnokRepository
-	serverRepo domain.ServerRepository
+	logger           *slog.Logger
+	knokRepo         domain.KnokRepository
+	serverRepo       domain.ServerRepository
+	oembedExtractor  *OEmbedExtractor
 }
 
 const (
@@ -35,10 +36,27 @@ func NewJobProcessor(
 	knokRepo domain.KnokRepository,
 	serverRepo domain.ServerRepository,
 ) *JobProcessor {
+	// Initialize oEmbed registry and extractor
+	oembedRegistry, err := NewOEmbedRegistry()
+	if err != nil {
+		logger.Error("Failed to initialize oEmbed registry", "error", err)
+		// Continue without oEmbed support
+		return &JobProcessor{
+			logger:     logger,
+			knokRepo:   knokRepo,
+			serverRepo: serverRepo,
+		}
+	}
+
+	logger.Info("oEmbed registry initialized", "provider_count", oembedRegistry.GetProviderCount())
+
+	oembedExtractor := NewOEmbedExtractor(oembedRegistry, logger)
+
 	return &JobProcessor{
-		logger:     logger,
-		knokRepo:   knokRepo,
-		serverRepo: serverRepo,
+		logger:          logger,
+		knokRepo:        knokRepo,
+		serverRepo:      serverRepo,
+		oembedExtractor: oembedExtractor,
 	}
 }
 
@@ -589,9 +607,34 @@ func (p *JobProcessor) extractMetadataWithRodSimple(ctx context.Context, url str
 	return metadata, nil
 }
 
-// extractMetadataWithFallbacks implements the three-tier metadata extraction strategy
+// extractMetadataWithFallbacks implements the four-tier metadata extraction strategy
 func (p *JobProcessor) extractMetadataWithFallbacks(ctx context.Context, url string) (map[string]string, string, error) {
-	p.logger.Info("Starting three-tier metadata extraction", "url", url)
+	p.logger.Info("Starting four-tier metadata extraction", "url", url)
+
+	// Tier 0: oEmbed API (fastest, most reliable for supported providers)
+	if p.oembedExtractor != nil {
+		p.logger.Info("Tier 0: Attempting oEmbed metadata extraction", "url", url)
+		oembedMetadata, err := p.oembedExtractor.TryExtract(ctx, url)
+		if err != nil {
+			// oEmbed failed, but continue to fallback tiers
+			p.logger.Warn("oEmbed extraction failed", "error", err, "url", url)
+		} else if oembedMetadata != nil {
+			// oEmbed succeeded!
+			p.logger.Info("oEmbed extraction successful",
+				"url", url,
+				"title", oembedMetadata["title"],
+				"has_image", oembedMetadata["image"] != "")
+
+			// Ensure description fallback
+			if oembedMetadata["description"] == "" {
+				oembedMetadata["description"] = url
+			}
+
+			return oembedMetadata, "oembed", nil
+		}
+		// oembedMetadata == nil means no provider found, continue to next tier
+		p.logger.Debug("No oEmbed provider for URL, trying fallback tiers", "url", url)
+	}
 
 	// Tier 1: HTTP + Static HTML Parsing
 	p.logger.Info("Tier 1: Attempting HTTP-based metadata extraction", "url", url)
