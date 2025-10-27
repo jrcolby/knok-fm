@@ -9,8 +9,7 @@ import (
 // NormalizeURL creates a canonical form of a URL for storage and deduplication.
 // It handles:
 // - Adding https:// protocol if missing
-// - Lowercasing the domain
-// - Removing www. prefix
+// - Lowercasing the domain (keeps www. as posted)
 // - Removing tracking parameters (utm_*, si, fbclid, ref, source)
 // - Validating the URL structure
 func NormalizeURL(rawURL string) (string, error) {
@@ -41,9 +40,8 @@ func NormalizeURL(rawURL string) (string, error) {
 		return "", fmt.Errorf("invalid URL: no host found")
 	}
 
-	// Step 4: Normalize domain (lowercase, remove www.)
+	// Step 4: Normalize domain (lowercase only - keep www. as posted)
 	u.Host = strings.ToLower(u.Host)
-	u.Host = strings.TrimPrefix(u.Host, "www.")
 
 	// Step 5: Remove tracking parameters
 	q := u.Query()
@@ -97,9 +95,8 @@ func GetCanonicalURL(u *url.URL) string {
 	// Clone the URL to avoid modifying the original
 	canonical := *u
 
-	// Normalize host (lowercase, remove www.)
+	// Normalize host (lowercase only - keep www. as posted)
 	canonical.Host = strings.ToLower(canonical.Host)
-	canonical.Host = strings.TrimPrefix(canonical.Host, "www.")
 
 	// Remove tracking parameters
 	q := canonical.Query()
