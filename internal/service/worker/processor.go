@@ -544,8 +544,8 @@ func (p *JobProcessor) extractMetadataWithRodSimple(ctx context.Context, url str
 	}
 	p.logger.Info("Browser launched successfully", "control_url", controlURL)
 
-	// Connect to browser with context (this makes all operations respect the timeout)
-	browser := rod.New().ControlURL(controlURL).Context(rodCtx)
+	// Connect to browser
+	browser := rod.New().ControlURL(controlURL)
 	if err := browser.Connect(); err != nil {
 		return nil, fmt.Errorf("failed to connect to browser: %w", err)
 	}
@@ -557,7 +557,7 @@ func (p *JobProcessor) extractMetadataWithRodSimple(ctx context.Context, url str
 
 	p.logger.Info("Rod browser connected", "url", url)
 
-	// Create page (inherits browser's context timeout)
+	// Create page
 	page, err := browser.Page(proto.TargetCreateTarget{URL: ""})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create page: %w", err)
@@ -568,19 +568,16 @@ func (p *JobProcessor) extractMetadataWithRodSimple(ctx context.Context, url str
 		}
 	}()
 
-	// Navigate to URL with proper error handling (respects rodCtx timeout)
-	p.logger.Info("Rod starting navigation", "url", url)
-	if err := page.Navigate(url); err != nil {
-		return nil, fmt.Errorf("failed to navigate to URL: %w", err)
+	// Navigate and wait for load with 15-second timeout using Rod's Timeout helper
+	p.logger.Info("Rod starting navigation with timeout", "url", url, "timeout", "15s")
+	err = rod.Try(func() {
+		page.Timeout(15 * time.Second).MustNavigate(url).MustWaitLoad()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to navigate/load (timeout after 15s): %w", err)
 	}
 
-	p.logger.Info("Rod navigated to page", "url", url)
-
-	// Wait for page load with error handling (respects rodCtx timeout)
-	if err := page.WaitLoad(); err != nil {
-		return nil, fmt.Errorf("failed to wait for page load: %w", err)
-	}
-	p.logger.Info("Rod page loaded", "url", url)
+	p.logger.Info("Rod page loaded successfully", "url", url)
 
 	// Wait for JavaScript (fixed time)
 	time.Sleep(3 * time.Second)
