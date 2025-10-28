@@ -49,12 +49,37 @@ func NewOEmbedExtractor(registry *OEmbedRegistry, logger *slog.Logger) *OEmbedEx
 	}
 }
 
+// normalizeForOEmbed normalizes URLs to match oEmbed provider patterns
+// For example, YouTube's oEmbed pattern requires a subdomain (*.youtube.com)
+// but users often post youtube.com without www, so we add it here
+func normalizeForOEmbed(rawURL string) string {
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL // Return as-is if we can't parse
+	}
+
+	host := strings.ToLower(parsedURL.Host)
+
+	// YouTube: add www. if missing (oEmbed pattern requires subdomain)
+	if host == "youtube.com" || host == "m.youtube.com" {
+		parsedURL.Host = "www.youtube.com"
+		return parsedURL.String()
+	}
+
+	// youtu.be is already handled by oEmbed patterns, no change needed
+
+	return rawURL
+}
+
 // TryExtract attempts to extract metadata using oEmbed
 // Returns nil metadata and nil error if no oEmbed provider is found (not an error, just skip)
 // Returns error only if provider exists but extraction failed
 func (e *OEmbedExtractor) TryExtract(ctx context.Context, resourceURL string) (map[string]string, error) {
+	// Normalize URL for oEmbed pattern matching
+	normalizedURL := normalizeForOEmbed(resourceURL)
+
 	// Check if we have an oEmbed provider for this URL
-	provider := e.registry.Match(resourceURL)
+	provider := e.registry.Match(normalizedURL)
 	if provider == nil {
 		// No provider found - this is not an error, just means oEmbed doesn't support this URL
 		return nil, nil
@@ -63,10 +88,11 @@ func (e *OEmbedExtractor) TryExtract(ctx context.Context, resourceURL string) (m
 	e.logger.Info("oEmbed provider found",
 		"provider", provider.Name,
 		"url", resourceURL,
+		"normalized_url", normalizedURL,
 		"endpoint", provider.Endpoint)
 
-	// Build oEmbed API URL
-	oembedURL, err := e.buildOEmbedURL(provider.Endpoint, resourceURL)
+	// Build oEmbed API URL using normalized URL
+	oembedURL, err := e.buildOEmbedURL(provider.Endpoint, normalizedURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build oEmbed URL: %w", err)
 	}
