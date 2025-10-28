@@ -1,0 +1,23 @@
+worker-1  | {"time":"2025-10-27T13:27:46.998771016Z","level":"INFO","msg":"Starting worker service..."}
+worker-1  | {"time":"2025-10-27T13:27:47.024935306Z","level":"INFO","msg":"Running database migrations..."}
+worker-1  | {"time":"2025-10-27T13:27:47.04361015Z","level":"INFO","msg":"Current migration version","version":5}
+worker-1  | {"time":"2025-10-27T13:27:47.044140384Z","level":"INFO","msg":"No migrations to apply - database is up to date"}
+worker-1  | {"time":"2025-10-27T13:27:47.052093059Z","level":"INFO","msg":"Connected to Redis","addr":"redis:6379","db":0}
+worker-1  | {"time":"2025-10-27T13:27:47.090597696Z","level":"INFO","msg":"oEmbed registry initialized","provider_count":351}
+worker-1  | {"time":"2025-10-27T13:27:47.091387338Z","level":"INFO","msg":"Starting worker service..."}
+worker-1  | {"time":"2025-10-27T13:27:47.09161829Z","level":"INFO","msg":"Worker service is running. Press Ctrl+C to stop."}
+worker-1  | {"time":"2025-10-27T13:28:52.093498417Z","level":"INFO","msg":"Job dequeued","job_id":"78470ff1-cd76-46aa-acfb-9b2c6fa60a5b","job_type":"extract_metadata","retry_count":0}
+worker-1  | {"time":"2025-10-27T13:28:52.093527805Z","level":"INFO","msg":"Processing job","job_id":"78470ff1-cd76-46aa-acfb-9b2c6fa60a5b","job_type":"extract_metadata"}
+worker-1  | {"time":"2025-10-27T13:28:52.094374912Z","level":"INFO","msg":"Job completed","job_id":"78470ff1-cd76-46aa-acfb-9b2c6fa60a5b","job_type":"extract_metadata"}
+worker-1  | {"time":"2025-10-27T13:28:52.094521758Z","level":"INFO","msg":"Processing metadata extraction job","job_id":"78470ff1-cd76-46aa-acfb-9b2c6fa60a5b","job_type":"extract_metadata","knok_id":"64f899de-fffd-41d6-b83c-abe32e6c316d","url":"https://youtube.com/watch?v=N70FUme5WYg","platform":"youtube"}
+worker-1  | {"time":"2025-10-27T13:28:52.116656739Z","level":"INFO","msg":"Extraction status updated successfully","knok_id":"64f899de-fffd-41d6-b83c-abe32e6c316d","status":"processing","rows_affected":1}
+worker-1  | {"time":"2025-10-27T13:28:52.116718178Z","level":"INFO","msg":"Starting four-tier metadata extraction","url":"https://youtube.com/watch?v=N70FUme5WYg"}
+worker-1  | {"time":"2025-10-27T13:28:52.116761108Z","level":"INFO","msg":"Tier 0: Attempting oEmbed metadata extraction","url":"https://youtube.com/watch?v=N70FUme5WYg"}
+worker-1  | {"time":"2025-10-27T13:28:52.117235402Z","level":"INFO","msg":"Tier 1: Attempting HTTP-based metadata extraction","url":"https://youtube.com/watch?v=N70FUme5WYg"}
+worker-1  | {"time":"2025-10-27T13:28:53.029573335Z","level":"INFO","msg":"HTTP metadata extraction results","url":"https://youtube.com/watch?v=N70FUme5WYg","title":"","description":"","image":"","site_name":"","total_fields":0}
+worker-1  | {"time":"2025-10-27T13:28:54.17301833Z","level":"WARN","msg":"Title extraction failed","error":"failed to extract title from HTML: no title tag found","url":"https://youtube.com/watch?v=N70FUme5WYg"}
+worker-1  | {"time":"2025-10-27T13:28:54.173087797Z","level":"INFO","msg":"Tier 2: Attempting Rod-based metadata extraction","url":"https://youtube.com/watch?v=N70FUme5WYg"}
+worker-1  | {"time":"2025-10-27T13:28:54.173093339Z","level":"INFO","msg":"Starting simple Rod metadata extraction","url":"https://youtube.com/watch?v=N70FUme5WYg"}
+worker-1  | {"time":"2025-10-27T13:28:54.173131729Z","level":"INFO","msg":"Using Chromium browser","path":"/usr/bin/chromium-browser"}
+worker-1  | {"time":"2025-10-27T13:28:55.164894074Z","level":"INFO","msg":"Browser launched successfully","control_url":"ws://127.0.0.1:37773/devtools/browser/64575eab-4edc-404d-bce6-693d026470a2"}
+worker-1  | {"time":"2025-10-27T13:28:55.209595216Z","level":"INFO","msg":"Rod browser connected","url":"https://youtube.com/watch?v=N70FUme5WYg"}

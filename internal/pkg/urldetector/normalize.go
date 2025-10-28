@@ -18,7 +18,15 @@ func NormalizeURL(rawURL string) (string, error) {
 		return "", fmt.Errorf("empty URL")
 	}
 
-	// Step 1: Add protocol if missing
+	// Step 1: URL-decode to handle double-encoded URLs (e.g., %3F -> ?)
+	// This handles cases where Discord or other platforms double-encode URLs
+	decoded, err := url.QueryUnescape(rawURL)
+	if err == nil && decoded != rawURL {
+		// Only use decoded version if it's different and valid
+		rawURL = decoded
+	}
+
+	// Step 2: Add protocol if missing
 	if !strings.HasPrefix(strings.ToLower(rawURL), "http://") &&
 		!strings.HasPrefix(strings.ToLower(rawURL), "https://") {
 		// Check if it looks like a domain (has at least one dot)
@@ -29,21 +37,21 @@ func NormalizeURL(rawURL string) (string, error) {
 		}
 	}
 
-	// Step 2: Parse URL
+	// Step 3: Parse URL
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse URL: %w", err)
 	}
 
-	// Step 3: Validate URL has a host
+	// Step 4: Validate URL has a host
 	if u.Host == "" {
 		return "", fmt.Errorf("invalid URL: no host found")
 	}
 
-	// Step 4: Normalize domain (lowercase only - keep www. as posted)
+	// Step 5: Normalize domain (lowercase only - keep www. as posted)
 	u.Host = strings.ToLower(u.Host)
 
-	// Step 5: Remove tracking parameters
+	// Step 6: Remove tracking parameters
 	q := u.Query()
 	trackingParams := []string{
 		// Google Analytics
@@ -68,7 +76,7 @@ func NormalizeURL(rawURL string) (string, error) {
 	}
 	u.RawQuery = q.Encode()
 
-	// Step 6: Rebuild canonical URL
+	// Step 7: Rebuild canonical URL
 	return u.String(), nil
 }
 
