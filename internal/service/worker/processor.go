@@ -544,9 +544,9 @@ func (p *JobProcessor) extractMetadataWithRodSimple(ctx context.Context, url str
 	}
 	p.logger.Info("Browser launched successfully", "control_url", controlURL)
 
-	// Connect to browser
-	browser := rod.New().ControlURL(controlURL)
-	if err := browser.Context(rodCtx).Connect(); err != nil {
+	// Connect to browser with context (this makes all operations respect the timeout)
+	browser := rod.New().ControlURL(controlURL).Context(rodCtx)
+	if err := browser.Connect(); err != nil {
 		return nil, fmt.Errorf("failed to connect to browser: %w", err)
 	}
 	defer func() {
@@ -557,8 +557,8 @@ func (p *JobProcessor) extractMetadataWithRodSimple(ctx context.Context, url str
 
 	p.logger.Info("Rod browser connected", "url", url)
 
-	// Create page with context timeout
-	page, err := browser.Context(rodCtx).Page(proto.TargetCreateTarget{URL: ""})
+	// Create page (inherits browser's context timeout)
+	page, err := browser.Page(proto.TargetCreateTarget{URL: ""})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create page: %w", err)
 	}
