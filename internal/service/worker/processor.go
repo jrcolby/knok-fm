@@ -568,6 +568,9 @@ func (p *JobProcessor) extractMetadataWithRodSimple(ctx context.Context, url str
 		}
 	}()
 
+	// Set timeout for all page operations (10 seconds for navigate + load)
+	page = page.Timeout(10 * time.Second)
+
 	// Navigate to URL with proper error handling
 	if err := page.Navigate(url); err != nil {
 		return nil, fmt.Errorf("failed to navigate to URL: %w", err)
