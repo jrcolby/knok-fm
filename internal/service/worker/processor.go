@@ -569,6 +569,7 @@ func (p *JobProcessor) extractMetadataWithRodSimple(ctx context.Context, url str
 	}()
 
 	// Navigate to URL with proper error handling (respects rodCtx timeout)
+	p.logger.Info("Rod starting navigation", "url", url)
 	if err := page.Navigate(url); err != nil {
 		return nil, fmt.Errorf("failed to navigate to URL: %w", err)
 	}
