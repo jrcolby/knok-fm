@@ -590,7 +590,19 @@ func (p *JobProcessor) extractMetadataWithRodSimple(ctx context.Context, url str
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract HTML: %w", err)
 	}
-	p.logger.Info("Rod HTML extracted", "url", url, "length", len(html))
+
+	// Log first 100 lines of HTML to debug what Rod is seeing
+	htmlLines := strings.Split(html, "\n")
+	previewLines := htmlLines
+	if len(htmlLines) > 100 {
+		previewLines = htmlLines[:100]
+	}
+	p.logger.Info("Rod HTML extracted",
+		"url", url,
+		"length", len(html),
+		"total_lines", len(htmlLines),
+		"preview_lines", len(previewLines),
+		"html_preview", strings.Join(previewLines, "\n"))
 
 	// Parse metadata
 	metadata, err := p.extractOgMetadataFromHTML(strings.NewReader(html))
