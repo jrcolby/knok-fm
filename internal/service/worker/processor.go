@@ -557,8 +557,8 @@ func (p *JobProcessor) extractMetadataWithRodSimple(ctx context.Context, url str
 
 	p.logger.Info("Rod browser connected", "url", url)
 
-	// Create page
-	page, err := browser.Page(proto.TargetCreateTarget{URL: ""})
+	// Create page with context timeout
+	page, err := browser.Context(rodCtx).Page(proto.TargetCreateTarget{URL: ""})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create page: %w", err)
 	}
@@ -568,17 +568,14 @@ func (p *JobProcessor) extractMetadataWithRodSimple(ctx context.Context, url str
 		}
 	}()
 
-	// Set timeout for all page operations (10 seconds for navigate + load)
-	page = page.Timeout(10 * time.Second)
-
-	// Navigate to URL with proper error handling
+	// Navigate to URL with proper error handling (respects rodCtx timeout)
 	if err := page.Navigate(url); err != nil {
 		return nil, fmt.Errorf("failed to navigate to URL: %w", err)
 	}
 
 	p.logger.Info("Rod navigated to page", "url", url)
 
-	// Wait for page load with error handling
+	// Wait for page load with error handling (respects rodCtx timeout)
 	if err := page.WaitLoad(); err != nil {
 		return nil, fmt.Errorf("failed to wait for page load: %w", err)
 	}
