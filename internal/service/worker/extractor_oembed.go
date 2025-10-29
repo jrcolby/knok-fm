@@ -22,20 +22,20 @@ type OEmbedExtractor struct {
 // oEmbedResponse represents the standard oEmbed JSON response
 // See: https://oembed.com/#section2.3
 type oEmbedResponse struct {
-	Type            string `json:"type"`             // "video", "photo", "link", "rich"
-	Version         string `json:"version"`          // oEmbed version (should be "1.0")
-	Title           string `json:"title"`            // Title of the resource
-	AuthorName      string `json:"author_name"`      // Author/creator name
-	AuthorURL       string `json:"author_url"`       // Author/creator URL
-	ProviderName    string `json:"provider_name"`    // Provider name (e.g., "YouTube")
-	ProviderURL     string `json:"provider_url"`     // Provider URL
-	ThumbnailURL    string `json:"thumbnail_url"`    // Thumbnail image URL
-	ThumbnailWidth  int    `json:"thumbnail_width"`  // Thumbnail width
-	ThumbnailHeight int    `json:"thumbnail_height"` // Thumbnail height
-	HTML            string `json:"html"`             // Embed HTML (for video/rich types)
-	Width           int    `json:"width"`            // Resource width
-	Height          int    `json:"height"`           // Resource height
-	Description     string `json:"description"`      // Description (not in spec, but some providers include it)
+	Type            string      `json:"type"`             // "video", "photo", "link", "rich"
+	Version         interface{} `json:"version"`          // oEmbed version (should be "1.0" string, but some providers send numeric 1.0)
+	Title           string      `json:"title"`            // Title of the resource
+	AuthorName      string      `json:"author_name"`      // Author/creator name
+	AuthorURL       string      `json:"author_url"`       // Author/creator URL
+	ProviderName    string      `json:"provider_name"`    // Provider name (e.g., "YouTube")
+	ProviderURL     string      `json:"provider_url"`     // Provider URL
+	ThumbnailURL    string      `json:"thumbnail_url"`    // Thumbnail image URL
+	ThumbnailWidth  int         `json:"thumbnail_width"`  // Thumbnail width
+	ThumbnailHeight int         `json:"thumbnail_height"` // Thumbnail height
+	HTML            string      `json:"html"`             // Embed HTML (for video/rich types)
+	Width           int         `json:"width"`            // Resource width
+	Height          int         `json:"height"`           // Resource height
+	Description     string      `json:"description"`      // Description (not in spec, but some providers include it)
 }
 
 // NewOEmbedExtractor creates a new oEmbed metadata extractor
@@ -60,8 +60,22 @@ func normalizeForOEmbed(rawURL string) string {
 // Returns nil metadata and nil error if no oEmbed provider is found (not an error, just skip)
 // Returns error only if provider exists but extraction failed
 func (e *OEmbedExtractor) TryExtract(ctx context.Context, resourceURL string) (map[string]string, error) {
+	// Resolve short links to canonical URLs before attempting oEmbed
+	// Many platforms (SoundCloud, Spotify) have short link domains that don't support oEmbed
+	resolvedURL, err := e.resolveShortLink(ctx, resourceURL)
+	if err != nil {
+		e.logger.Debug("Failed to resolve short link, using original URL",
+			"original_url", resourceURL,
+			"error", err)
+		resolvedURL = resourceURL
+	} else if resolvedURL != resourceURL {
+		e.logger.Info("Resolved short link to canonical URL",
+			"short_url", resourceURL,
+			"canonical_url", resolvedURL)
+	}
+
 	// Normalize URL for oEmbed pattern matching
-	normalizedURL := normalizeForOEmbed(resourceURL)
+	normalizedURL := normalizeForOEmbed(resolvedURL)
 
 	// Check if we have an oEmbed provider for this URL
 	provider := e.registry.Match(normalizedURL)
@@ -194,4 +208,86 @@ func (e *OEmbedExtractor) oembedToMetadata(oembed *oEmbedResponse, originalURL s
 	}
 
 	return metadata
+}
+
+// resolveShortLink follows HTTP redirects for short link domains to get the canonical URL
+// Common short link domains: on.soundcloud.com, spotify.link, youtu.be, etc.
+func (e *OEmbedExtractor) resolveShortLink(ctx context.Context, rawURL string) (string, error) {
+	// Parse the URL to check if it's a known short link domain
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL, err
+	}
+
+	// List of known short link domains that need resolution
+	shortLinkDomains := map[string]bool{
+		"on.soundcloud.com": true,
+		"spotify.link":      true,
+		"youtu.be":          true,
+		"spoti.fi":          true,
+		"amzn.to":           true,
+		"band.link":         true,
+	}
+
+	// Check if this is a short link domain
+	if !shortLinkDomains[parsedURL.Host] {
+		// Not a short link, return as-is
+		return rawURL, nil
+	}
+
+	// Create an HTTP client that doesn't follow redirects automatically
+	// We want to capture the redirect location
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			// Stop after first redirect - we just want the Location header
+			if len(via) >= 1 {
+				return http.ErrUseLastResponse
+			}
+			return nil
+		},
+	}
+
+	// Make a HEAD request to get the redirect without downloading content
+	req, err := http.NewRequestWithContext(ctx, "HEAD", rawURL, nil)
+	if err != nil {
+		return rawURL, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", browserUserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return rawURL, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check if we got a redirect (3xx status)
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		location := resp.Header.Get("Location")
+		if location == "" {
+			return rawURL, fmt.Errorf("redirect response but no Location header")
+		}
+
+		// Resolve relative redirects
+		resolvedURL, err := url.Parse(location)
+		if err != nil {
+			return rawURL, fmt.Errorf("failed to parse redirect location: %w", err)
+		}
+
+		// If the location is relative, make it absolute
+		if !resolvedURL.IsAbs() {
+			resolvedURL = parsedURL.ResolveReference(resolvedURL)
+		}
+
+		e.logger.Debug("Resolved short link redirect",
+			"short_url", rawURL,
+			"resolved_url", resolvedURL.String(),
+			"status_code", resp.StatusCode)
+
+		return resolvedURL.String(), nil
+	}
+
+	// Not a redirect, return original URL
+	return rawURL, nil
 }
