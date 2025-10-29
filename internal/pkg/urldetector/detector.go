@@ -203,11 +203,15 @@ func (d *Detector) addIfSupported(rawURL string, urls *[]URLInfo, seen map[strin
 		decodedURL = rawURL
 	}
 
+	// Fix malformed query strings: after the first ?, any subsequent ? should be &
+	// This handles Discord's encoding where &si=123 becomes %3Fsi%3D123
+	decodedURL = fixMalformedQueryString(decodedURL)
+
 	// Log the URL decoding if it changed the URL
 	if decodedURL != rawURL {
-		d.logger.Info("URL decoded",
+		d.logger.Info("URL decoded and fixed",
 			"raw_url", rawURL,
-			"decoded_url", decodedURL)
+			"fixed_url", decodedURL)
 	}
 
 	// Normalize the URL for canonical form and deduplication
@@ -231,6 +235,26 @@ func (d *Detector) addIfSupported(rawURL string, urls *[]URLInfo, seen map[strin
 		URL:      normalizedURL,
 		Platform: platform,
 	})
+}
+
+// fixMalformedQueryString fixes URLs where subsequent ? should be &
+// Example: "https://youtube.com/watch?v=ABC?si=XYZ" -> "https://youtube.com/watch?v=ABC&si=XYZ"
+func fixMalformedQueryString(rawURL string) string {
+	// Find the first ? (start of query string)
+	firstQ := strings.Index(rawURL, "?")
+	if firstQ == -1 {
+		// No query string, return as-is
+		return rawURL
+	}
+
+	// Split into base and query parts
+	base := rawURL[:firstQ+1] // Include the first ?
+	queryPart := rawURL[firstQ+1:]
+
+	// Replace any remaining ? with &
+	queryPart = strings.ReplaceAll(queryPart, "?", "&")
+
+	return base + queryPart
 }
 
 // detectPlatformFromURL detects platform using database-loaded patterns

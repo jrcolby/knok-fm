@@ -100,6 +100,11 @@ func (s *BotService) onMessageCreate(session *discordgo.Session, message *discor
 	}
 
 	// Check if message contains any supported URLs
+	s.logger.Info("🔍 RAW MESSAGE CONTENT from Discord",
+		"handler_id", handlerID,
+		"message_content", message.Content,
+		"content_length", len(message.Content))
+
 	urls := s.extractURLs(message.Content)
 	if len(urls) == 0 {
 		s.logger.Debug("HANDLER_EXIT: No URLs found",
