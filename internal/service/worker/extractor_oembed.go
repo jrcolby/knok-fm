@@ -82,6 +82,11 @@ func (e *OEmbedExtractor) TryExtract(ctx context.Context, resourceURL string) (m
 		return nil, fmt.Errorf("failed to build oEmbed URL: %w", err)
 	}
 
+	e.logger.Info("Making oEmbed API request",
+		"provider", provider.Name,
+		"oembed_api_url", oembedURL,
+		"resource_url", normalizedURL)
+
 	// Fetch oEmbed data
 	oembedData, err := e.fetchOEmbed(ctx, oembedURL)
 	if err != nil {

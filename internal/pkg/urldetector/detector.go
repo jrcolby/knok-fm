@@ -3,6 +3,7 @@ package urldetector
 import (
 	"knock-fm/internal/domain"
 	"log/slog"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -193,8 +194,24 @@ func (d *Detector) DetectURLs(content string) []URLInfo {
 // addIfSupported normalizes a URL, detects its platform, and adds it to the results if valid.
 // This helper prevents duplicates and ensures all URLs are properly normalized.
 func (d *Detector) addIfSupported(rawURL string, urls *[]URLInfo, seen map[string]bool) {
+	// URL-decode first to handle Discord's double-encoded URLs
+	// Discord sometimes sends URLs like: https://youtube.com/watch?v=ABC%3Fsi%3DXYZ
+	// which should be: https://youtube.com/watch?v=ABC&si=XYZ
+	decodedURL, err := url.QueryUnescape(rawURL)
+	if err != nil {
+		// If decoding fails, use the original URL
+		decodedURL = rawURL
+	}
+
+	// Log the URL decoding if it changed the URL
+	if decodedURL != rawURL {
+		d.logger.Info("URL decoded",
+			"raw_url", rawURL,
+			"decoded_url", decodedURL)
+	}
+
 	// Normalize the URL for canonical form and deduplication
-	normalizedURL, err := NormalizeURL(rawURL)
+	normalizedURL, err := NormalizeURL(decodedURL)
 	if err != nil {
 		// Invalid URL, skip it
 		return
