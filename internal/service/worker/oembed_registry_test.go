@@ -42,8 +42,20 @@ func TestOEmbedRegistryMatching(t *testing.T) {
 			wantMatch:    true,
 		},
 		{
-			name:         "YouTube mobile URL",
-			url:          "https://m.youtube.com/watch?v=test123",
+			name:         "YouTube no-subdomain with double-encoded params",
+			url:          "https://youtube.com/watch?v=59xGmHzxtZ4%3Fsi%3DRROE_3KHi3ZVAtZi",
+			wantProvider: "YouTube",
+			wantMatch:    true,
+		},
+		{
+			name:         "YouTube no-subdomain with double-encoded params (2)",
+			url:          "https://youtube.com/watch?v=D1avYj7q42A%3Fsi%3D5c2KrgyqSfo_0jSE",
+			wantProvider: "YouTube",
+			wantMatch:    true,
+		},
+		{
+			name:         "YouTube no-subdomain basic",
+			url:          "https://youtube.com/watch?v=test123",
 			wantProvider: "YouTube",
 			wantMatch:    true,
 		},

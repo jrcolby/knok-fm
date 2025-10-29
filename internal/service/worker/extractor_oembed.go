@@ -50,24 +50,9 @@ func NewOEmbedExtractor(registry *OEmbedRegistry, logger *slog.Logger) *OEmbedEx
 }
 
 // normalizeForOEmbed normalizes URLs to match oEmbed provider patterns
-// For example, YouTube's oEmbed pattern requires a subdomain (*.youtube.com)
-// but users often post youtube.com without www, so we add it here
+// Currently just a passthrough, but kept for future normalization needs
 func normalizeForOEmbed(rawURL string) string {
-	parsedURL, err := url.Parse(rawURL)
-	if err != nil {
-		return rawURL // Return as-is if we can't parse
-	}
-
-	host := strings.ToLower(parsedURL.Host)
-
-	// YouTube: add www. if missing (oEmbed pattern requires subdomain)
-	if host == "youtube.com" || host == "m.youtube.com" {
-		parsedURL.Host = "www.youtube.com"
-		return parsedURL.String()
-	}
-
-	// youtu.be is already handled by oEmbed patterns, no change needed
-
+	// Could add URL normalization logic here if needed in the future
 	return rawURL
 }
 

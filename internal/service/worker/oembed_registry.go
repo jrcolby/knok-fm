@@ -62,8 +62,16 @@ func NewOEmbedRegistry() (*OEmbedRegistry, error) {
 			Schemes:  make([]*regexp.Regexp, 0, len(endpoint.Schemes)),
 		}
 
+		// KLUDGE: Add custom schemes for YouTube to handle double-encoded share URLs
+		// Discord users share URLs like https://youtube.com/watch?v=ABC%3Fsi%3DXYZ
+		// which don't match YouTube's official oEmbed schemes (which require subdomains)
+		schemes := endpoint.Schemes
+		if raw.ProviderName == "YouTube" {
+			schemes = append(schemes, "https://youtube.com/watch*")
+		}
+
 		// Compile URL patterns into regexes
-		for _, scheme := range endpoint.Schemes {
+		for _, scheme := range schemes {
 			pattern := schemeToRegex(scheme)
 			regex, err := regexp.Compile(pattern)
 			if err != nil {

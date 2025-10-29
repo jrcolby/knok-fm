@@ -18,15 +18,7 @@ func NormalizeURL(rawURL string) (string, error) {
 		return "", fmt.Errorf("empty URL")
 	}
 
-	// Step 1: URL-decode to handle double-encoded URLs (e.g., %3F -> ?)
-	// This handles cases where Discord or other platforms double-encode URLs
-	decoded, err := url.QueryUnescape(rawURL)
-	if err == nil && decoded != rawURL {
-		// Only use decoded version if it's different and valid
-		rawURL = decoded
-	}
-
-	// Step 2: Add protocol if missing
+	// Step 1: Add protocol if missing (required for url.Parse to work correctly)
 	if !strings.HasPrefix(strings.ToLower(rawURL), "http://") &&
 		!strings.HasPrefix(strings.ToLower(rawURL), "https://") {
 		// Check if it looks like a domain (has at least one dot)
@@ -37,21 +29,24 @@ func NormalizeURL(rawURL string) (string, error) {
 		}
 	}
 
-	// Step 3: Parse URL
+	// Step 2: Parse URL
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse URL: %w", err)
 	}
 
-	// Step 4: Validate URL has a host
+	// Step 3: Validate URL has a host
 	if u.Host == "" {
 		return "", fmt.Errorf("invalid URL: no host found")
 	}
 
-	// Step 5: Normalize domain (lowercase only - keep www. as posted)
+	// Step 4: Normalize domain (lowercase only - keep www. as posted)
 	u.Host = strings.ToLower(u.Host)
 
-	// Step 6: Remove tracking parameters
+	// Step 5: Remove tracking parameters
+	// NOTE: u.Query() only parses properly-formatted query strings (after the first ?)
+	// It will NOT parse encoded query params like %3Fsi%3D - this is intentional!
+	// We want to preserve the URL as the user posted it, just remove actual tracking params
 	q := u.Query()
 	trackingParams := []string{
 		// Google Analytics
@@ -61,11 +56,11 @@ func NormalizeURL(rawURL string) (string, error) {
 		"utm_content",
 		"utm_term",
 		// Platform-specific tracking
-		"si",      // Spotify/YouTube share ID
-		"fbclid",  // Facebook click ID
-		"gclid",   // Google click ID
-		"ref",     // Generic referrer
-		"source",  // Generic source
+		"si",     // Spotify/YouTube share ID
+		"fbclid", // Facebook click ID
+		"gclid",  // Google click ID
+		"ref",    // Generic referrer
+		"source", // Generic source
 		// Additional tracking params
 		"msclkid", // Microsoft click ID
 		"igshid",  // Instagram share ID
@@ -76,7 +71,7 @@ func NormalizeURL(rawURL string) (string, error) {
 	}
 	u.RawQuery = q.Encode()
 
-	// Step 7: Rebuild canonical URL
+	// Step 6: Rebuild canonical URL
 	return u.String(), nil
 }
 
