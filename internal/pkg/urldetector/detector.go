@@ -154,8 +154,9 @@ func (d *Detector) DetectURLs(content string) []URLInfo {
 
 	// Stage 3: Extract Standard URLs (comprehensive pattern)
 	// Matches http(s):// URLs with domain, path, query, fragment
+	// Stop at @ symbol to avoid capturing Discord mentions after URLs
 	urlRegex := regexp.MustCompile(
-		`(?i)https?://[\w\-]+(?:\.[\w\-]+)+(?:/[^\s<>\[\]()]*)?(?:\?[^\s<>\[\]()]*)?(?:#[^\s<>\[\]()]*)?`,
+		`(?i)https?://[\w\-]+(?:\.[\w\-]+)+(?:/[^\s<>\[\]()@]*)?(?:\?[^\s<>\[\]()@]*)?(?:#[^\s<>\[\]()@]*)?`,
 	)
 
 	for _, match := range urlRegex.FindAllString(cleanContent, -1) {
