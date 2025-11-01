@@ -21,6 +21,10 @@ func (s *BotService) onMessageCreate(session *discordgo.Session, message *discor
 	s.logger.Info("🚨 HANDLER_INVOCATION: onMessageCreate called",
 		"handler_id", handlerID,
 		"message_id", message.ID,
+		"channel_id", message.ChannelID,
+		"guild_id", message.GuildID,
+		"author_id", message.Author.ID,
+		"is_bot", message.Author.Bot,
 		"bot_service_ptr", fmt.Sprintf("%p", s),
 		"session_ptr", fmt.Sprintf("%p", session),
 		"timestamp", message.Timestamp.UnixNano(),
@@ -28,7 +32,7 @@ func (s *BotService) onMessageCreate(session *discordgo.Session, message *discor
 
 	// Ignore bot messages
 	if message.Author.Bot {
-		s.logger.Debug("HANDLER_EXIT: Ignoring bot message", "handler_id", handlerID)
+		s.logger.Info("HANDLER_EXIT: Ignoring bot message", "handler_id", handlerID, "author_id", message.Author.ID)
 		return
 	}
 
@@ -42,13 +46,14 @@ func (s *BotService) onMessageCreate(session *discordgo.Session, message *discor
 			}
 		}
 		if !allowed {
-			s.logger.Debug("HANDLER_EXIT: Guild not in allowed list",
+			s.logger.Info("HANDLER_EXIT: Guild not in allowed list",
 				"handler_id", handlerID,
 				"guild_id", message.GuildID,
 				"allowed_guilds", s.config.DiscordAllowedGuilds,
 			)
 			return
 		}
+		s.logger.Info("Guild check passed", "handler_id", handlerID, "guild_id", message.GuildID)
 	}
 
 	// Check global channel restrictions from environment
@@ -61,13 +66,14 @@ func (s *BotService) onMessageCreate(session *discordgo.Session, message *discor
 			}
 		}
 		if !allowed {
-			s.logger.Debug("HANDLER_EXIT: Channel not in global allowed list",
+			s.logger.Info("HANDLER_EXIT: Channel not in global allowed list",
 				"handler_id", handlerID,
 				"channel_id", message.ChannelID,
 				"allowed_channels", s.config.DiscordAllowedChannels,
 			)
 			return
 		}
+		s.logger.Info("Channel check passed", "handler_id", handlerID, "channel_id", message.ChannelID)
 	}
 
 	// Check if server has channel restrictions (per-server database settings)
@@ -84,14 +90,14 @@ func (s *BotService) onMessageCreate(session *discordgo.Session, message *discor
 					}
 				}
 				if !isAllowed {
-					s.logger.Debug("Message from non-allowed channel, ignoring",
+					s.logger.Info("HANDLER_EXIT: Message from non-allowed channel (database settings)",
 						"handler_id", handlerID,
 						"channel_id", message.ChannelID,
 						"allowed_channels", allowedChannels,
 					)
 					return
 				}
-				s.logger.Debug("Message from allowed channel, processing",
+				s.logger.Info("Database channel check passed",
 					"handler_id", handlerID,
 					"channel_id", message.ChannelID,
 				)
@@ -153,15 +159,27 @@ func (s *BotService) onMessageCreate(session *discordgo.Session, message *discor
 			"knoks_created", knoksCreated,
 		)
 
-		s.logger.Debug("HANDLER_EXIT: Processing completed successfully",
+		s.logger.Info("HANDLER_EXIT: Processing completed successfully",
 			"handler_id", handlerID,
 			"knoks_created", knoksCreated,
 		)
 
 		// Add emoji reaction to give user feedback
+		s.logger.Info("Attempting to add reaction emoji",
+			"handler_id", handlerID,
+			"channel_id", message.ChannelID,
+			"message_id", message.ID,
+		)
 		if err := session.MessageReactionAdd(message.ChannelID, message.ID, "🎵"); err != nil {
-			s.logger.Warn("Failed to add emoji reaction",
+			s.logger.Error("Failed to add emoji reaction - check bot permissions",
 				"error", err,
+				"message_id", message.ID,
+				"channel_id", message.ChannelID,
+				"guild_id", message.GuildID,
+			)
+		} else {
+			s.logger.Info("Successfully added reaction emoji",
+				"handler_id", handlerID,
 				"message_id", message.ID,
 			)
 		}
