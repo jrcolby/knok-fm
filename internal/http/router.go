@@ -31,6 +31,7 @@ func NewRouter(
 	logger *slog.Logger,
 	serverRepo domain.ServerRepository,
 	knokRepo domain.KnokRepository,
+	queueRepo domain.QueueRepository,
 	platformRepo handlers.PlatformRepository,
 	platformLoader PlatformLoader,
 ) *Router {
@@ -42,7 +43,7 @@ func NewRouter(
 		healthHandler:        handlers.NewHealthHandler(logger),
 		statsHandler:         handlers.NewStatsHandler(logger),
 		serversHandler:       handlers.NewServersHandler(logger, serverRepo),
-		knoksHandler:         handlers.NewKnoksHandler(logger, knokRepo),
+		knoksHandler:         handlers.NewKnoksHandler(logger, knokRepo, queueRepo),
 		adminPlatformHandler: handlers.NewAdminPlatformHandler(platformRepo, platformLoader, logger),
 		adminAuth:            middleware.NewAdminAuth(logger),
 	}
@@ -71,6 +72,7 @@ func (r *Router) SetupRoutes() http.Handler {
 	// API v1 routes - Admin endpoints for managing knoks
 	r.mux.HandleFunc("DELETE /api/v1/knoks/{id}", r.knoksHandler.DeleteKnok)
 	r.mux.HandleFunc("PATCH /api/v1/knoks/{id}", r.knoksHandler.UpdateKnok)
+	r.mux.Handle("POST /api/v1/admin/knoks/{id}/refresh", r.adminAuth.Middleware(http.HandlerFunc(r.knoksHandler.RefreshKnok)))
 
 	// Admin platform management endpoints (protected by auth middleware)
 	r.mux.Handle("GET /api/v1/admin/platforms", r.adminAuth.Middleware(http.HandlerFunc(r.adminPlatformHandler.ListPlatforms)))

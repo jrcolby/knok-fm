@@ -25,6 +25,7 @@ type APIService struct {
 	router         *knokhttp.Router
 	knokRepo       domain.KnokRepository
 	serverRepo     domain.ServerRepository
+	queueRepo      domain.QueueRepository
 	platformRepo   handlers.PlatformRepository
 	platformLoader PlatformLoader
 
@@ -38,10 +39,11 @@ func New(
 	logger *slog.Logger,
 	knokRepo domain.KnokRepository,
 	serverRepo domain.ServerRepository,
+	queueRepo domain.QueueRepository,
 	platformRepo handlers.PlatformRepository,
 	platformLoader PlatformLoader,
 ) (*APIService, error) {
-	router := knokhttp.NewRouter(logger, serverRepo, knokRepo, platformRepo, platformLoader)
+	router := knokhttp.NewRouter(logger, serverRepo, knokRepo, queueRepo, platformRepo, platformLoader)
 
 	apiService := &APIService{
 		config:         config,
@@ -49,6 +51,7 @@ func New(
 		router:         router,
 		knokRepo:       knokRepo,
 		serverRepo:     serverRepo,
+		queueRepo:      queueRepo,
 		platformRepo:   platformRepo,
 		platformLoader: platformLoader,
 	}

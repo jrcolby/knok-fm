@@ -7,6 +7,7 @@ import (
 	"knock-fm/internal/config"
 	"knock-fm/internal/pkg/logger"
 	"knock-fm/internal/repository/postgres"
+	"knock-fm/internal/repository/redis"
 	"knock-fm/internal/service/api"
 	"knock-fm/internal/service/platforms"
 	"os"
@@ -51,9 +52,24 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Connect to Redis
+	redisClient, err := redis.NewClient(cfg.RedisURL, log)
+	if err != nil {
+		log.Error("Failed to connect to Redis", "error", err)
+		os.Exit(1)
+	}
+	defer redisClient.Close()
+
+	// Test Redis connection
+	if err := redis.HealthCheck(context.Background(), redisClient); err != nil {
+		log.Error("Failed to ping Redis", "error", err)
+		os.Exit(1)
+	}
+
 	// Create repositories
 	knokRepo := postgres.NewKnokRepository(db, log)
 	serverRepo := postgres.NewServerRepository(db, log)
+	queueRepo := redis.NewQueueRepository(redisClient, log)
 	platformRepo := postgres.NewPlatformRepository(db, log)
 
 	// Create and load platform loader
@@ -68,7 +84,7 @@ func main() {
 	)
 
 	// Create API service
-	apiService, err := api.New(cfg, log, knokRepo, serverRepo, platformRepo, platformLoader)
+	apiService, err := api.New(cfg, log, knokRepo, serverRepo, queueRepo, platformRepo, platformLoader)
 	if err != nil {
 		log.Error("Failed to create API service", "error", err)
 		os.Exit(1)
