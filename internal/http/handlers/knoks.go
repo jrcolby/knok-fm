@@ -17,8 +17,9 @@ const (
 )
 
 type KnoksHandler struct {
-	logger   *slog.Logger
-	knokRepo domain.KnokRepository
+	logger    *slog.Logger
+	knokRepo  domain.KnokRepository
+	queueRepo domain.QueueRepository
 }
 
 // KnoksResponse represents the paginated response for knoks
@@ -36,10 +37,11 @@ type KnokDto struct {
 	Metadata map[string]interface{} `json:"metadata"`
 }
 
-func NewKnoksHandler(logger *slog.Logger, knokRepo domain.KnokRepository) *KnoksHandler {
+func NewKnoksHandler(logger *slog.Logger, knokRepo domain.KnokRepository, queueRepo domain.QueueRepository) *KnoksHandler {
 	return &KnoksHandler{
-		logger:   logger,
-		knokRepo: knokRepo,
+		logger:    logger,
+		knokRepo:  knokRepo,
+		queueRepo: queueRepo,
 	}
 }
 
@@ -361,6 +363,111 @@ func (h *KnoksHandler) UpdateKnok(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.logger.Info("Knok updated successfully", "knok_id", knokID, "title", knok.Title)
+
+	// Return updated knok
+	title := "Processing..."
+	if knok.Title != nil {
+		title = *knok.Title
+	}
+
+	response := &KnokDto{
+		Title:    title,
+		PostedAt: knok.PostedAt,
+		ID:       knok.ID.String(),
+		URL:      knok.URL,
+		Metadata: knok.Metadata,
+	}
+
+	h.writeJSONResponse(w, response)
+}
+
+// RefreshKnokRequest represents the request body for refreshing a knok's metadata
+type RefreshKnokRequest struct {
+	URL *string `json:"url,omitempty"`
+}
+
+// RefreshKnok handles POST /api/v1/admin/knoks/:id/refresh
+func (h *KnoksHandler) RefreshKnok(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Get knok ID from path
+	knokIDStr := r.PathValue("id")
+	if knokIDStr == "" {
+		http.Error(w, "Knok ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Parse UUID
+	knokID, err := uuid.Parse(knokIDStr)
+	if err != nil {
+		h.logger.Warn("Invalid knok ID format", "id", knokIDStr, "error", err)
+		http.Error(w, "Invalid knok ID format", http.StatusBadRequest)
+		return
+	}
+
+	// Parse request body (optional URL)
+	var req RefreshKnokRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Warn("Invalid request body", "error", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Check if knok exists
+	knok, err := h.knokRepo.GetByID(ctx, knokID)
+	if err != nil {
+		h.logger.Error("Failed to get knok", "error", err, "knok_id", knokID)
+		http.Error(w, "Knok not found", http.StatusNotFound)
+		return
+	}
+
+	// Update URL if new one provided
+	urlToUse := knok.URL
+	if req.URL != nil && *req.URL != "" {
+		urlToUse = *req.URL
+		knok.URL = urlToUse
+		h.logger.Info("Updating knok URL", "knok_id", knokID, "old_url", knok.URL, "new_url", urlToUse)
+	} else {
+		h.logger.Info("Refreshing knok with existing URL", "knok_id", knokID, "url", urlToUse)
+	}
+
+	// Set extraction status to pending
+	knok.ExtractionStatus = domain.ExtractionStatusPending
+
+	// Update the knok in database
+	if err := h.knokRepo.Update(ctx, knok); err != nil {
+		h.logger.Error("Failed to update knok", "error", err, "knok_id", knokID)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Queue metadata extraction job
+	jobPayload := map[string]interface{}{
+		"knok_id":  knokID.String(),
+		"url":      urlToUse,
+		"platform": knok.Platform,
+	}
+
+	if err := h.queueRepo.Enqueue(ctx, domain.JobTypeExtractMetadata, jobPayload); err != nil {
+		h.logger.Error("Failed to queue metadata extraction job",
+			"error", err,
+			"knok_id", knokID,
+			"url", urlToUse,
+		)
+
+		// Rollback extraction status to failed
+		knok.ExtractionStatus = domain.ExtractionStatusFailed
+		h.knokRepo.Update(ctx, knok)
+
+		http.Error(w, "Failed to queue metadata extraction job", http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Info("Knok refresh initiated successfully",
+		"knok_id", knokID,
+		"url", urlToUse,
+		"status", knok.ExtractionStatus,
+	)
 
 	// Return updated knok
 	title := "Processing..."
