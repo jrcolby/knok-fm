@@ -23,14 +23,13 @@ export function useInfiniteKnoks({
   enabled = true,
 }: UseInfiniteKnoksOptions): UseInfiniteKnoksResult {
   const [isTyping, setIsTyping] = useState(false);
-  
+
   const isSearchMode = !!searchQuery;
 
   // Infinite query for timeline knoks (global, all servers)
   const timelineQuery = useInfiniteQuery({
     queryKey: ["infinite-knoks"], // No serverId - global timeline
-    queryFn: ({ pageParam }) =>
-      apiClient.getKnoks(pageParam, 25), // Global endpoint
+    queryFn: ({ pageParam }) => apiClient.getKnoks(pageParam, 25), // Global endpoint
     enabled: enabled && !isSearchMode,
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => {
@@ -44,9 +43,10 @@ export function useInfiniteKnoks({
   // Infinite query for search results (global, not server-specific)
   const searchQuery_infinite = useInfiniteQuery({
     queryKey: ["infinite-search", searchQuery],
-    queryFn: ({ pageParam }) =>
-      apiClient.searchKnoks(searchQuery!, pageParam),
+    queryFn: ({ pageParam }) => apiClient.searchKnoks(searchQuery!, pageParam),
     enabled: false, // Manual control with debouncing
+    // don't refetch on window focus for ephemeral manual searches
+    refetchOnWindowFocus: false,
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => {
       return lastPage.has_more ? lastPage.cursor : undefined;
@@ -56,6 +56,10 @@ export function useInfiniteKnoks({
 
   // Debounced search effect
   useEffect(() => {
+    // Only depend on the input values, not the entire query object.
+    // Including the full `searchQuery_infinite` result in deps can
+    // change identity across renders and cause the debounce effect
+    // to re-schedule repeatedly which leads to repeated refetches.
     if (!searchQuery || !enabled) {
       setIsTyping(false);
       return;
@@ -64,22 +68,26 @@ export function useInfiniteKnoks({
     setIsTyping(true);
 
     const timeoutId = setTimeout(() => {
+      // call the refetch function from the query result
       searchQuery_infinite.refetch();
       setTimeout(() => setIsTyping(false), 50);
     }, 300); // Debounce by 300ms
 
     return () => clearTimeout(timeoutId);
-  }, [searchQuery, enabled, searchQuery_infinite]);
+    // intentionally omit the query result object from deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, enabled]);
 
   // Choose the appropriate query based on mode
   const activeQuery = isSearchMode ? searchQuery_infinite : timelineQuery;
 
   // Flatten all pages into a single array of knoks
-  const knoks: KnokDto[] = activeQuery.data?.pages.flatMap(page => page.knoks) ?? [];
+  const knoks: KnokDto[] =
+    activeQuery.data?.pages.flatMap((page) => page.knoks) ?? [];
 
   // Determine loading state
-  const isLoading = isSearchMode 
-    ? (searchQuery_infinite.isLoading || isTyping)
+  const isLoading = isSearchMode
+    ? searchQuery_infinite.isLoading || isTyping
     : timelineQuery.isLoading;
 
   return {

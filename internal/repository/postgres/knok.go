@@ -432,8 +432,26 @@ func (r *KnokRepository) Update(ctx context.Context, knok *domain.Knok) error {
 
 // Delete removes a knok by ID
 func (r *KnokRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	r.logger.Info("Delete called (not implemented yet)", "knok_id", id)
-	// TODO: Implement actual PostgreSQL delete
+	query := `DELETE FROM knoks WHERE id = $1`
+
+	result, err := r.db.ExecContext(ctx, query, id)
+	if err != nil {
+		r.logger.Error("Failed to delete knok from database", "error", err, "knok_id", id)
+		return fmt.Errorf("failed to delete knok: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		r.logger.Error("Failed to get rows affected", "error", err, "knok_id", id)
+		return fmt.Errorf("failed to verify deletion: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		r.logger.Warn("No knok found to delete", "knok_id", id)
+		return fmt.Errorf("knok not found")
+	}
+
+	r.logger.Info("Knok deleted from database", "knok_id", id, "rows_affected", rowsAffected)
 	return nil
 }
 

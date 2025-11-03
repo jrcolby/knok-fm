@@ -73,7 +73,7 @@ func (h *KnoksHandler) buildKnokResponse(knoks []*domain.Knok, requestedLimit in
 		if knok.Title != nil {
 			title = *knok.Title
 		}
-		
+
 		knokDtos = append(knokDtos, &KnokDto{
 			Title:    title,
 			PostedAt: knok.PostedAt,
@@ -120,7 +120,7 @@ func (h *KnoksHandler) GetRandomKnok(w http.ResponseWriter, r *http.Request) {
 	if knok.Title != nil {
 		title = *knok.Title
 	}
-	
+
 	response := &KnokDto{
 		Title:    title,
 		PostedAt: knok.PostedAt,
@@ -255,7 +255,15 @@ func (h *KnoksHandler) GetKnoksByServer(w http.ResponseWriter, r *http.Request) 
 	h.writeJSONResponse(w, response)
 }
 
-// DeleteKnok handles DELETE /api/knoks/:id
+// DeleteKnokResponse represents the response when a knok is deleted
+type DeleteKnokResponse struct {
+	Message string `json:"message"`
+	KnokID  string `json:"knok_id"`
+	URL     string `json:"url"`
+	Title   string `json:"title"`
+}
+
+// DeleteKnok handles DELETE /api/v1/admin/knoks/:id
 func (h *KnoksHandler) DeleteKnok(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -274,7 +282,7 @@ func (h *KnoksHandler) DeleteKnok(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if knok exists
+	// Check if knok exists and get its details before deletion
 	knok, err := h.knokRepo.GetByID(ctx, knokID)
 	if err != nil {
 		h.logger.Error("Failed to get knok", "error", err, "knok_id", knokID)
@@ -289,8 +297,26 @@ func (h *KnoksHandler) DeleteKnok(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.logger.Info("Knok deleted successfully", "knok_id", knokID, "url", knok.URL)
-	w.WriteHeader(http.StatusNoContent)
+	h.logger.Info("Knok deleted successfully", "knok_id", knokID, "url", knok.URL, "title", knok.Title)
+
+	// Return success response with deletion details
+	title := ""
+	if knok.Title != nil {
+		title = *knok.Title
+	}
+
+	response := DeleteKnokResponse{
+		Message: "Knok deleted successfully",
+		KnokID:  knokID.String(),
+		URL:     knok.URL,
+		Title:   title,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.logger.Error("Failed to encode delete response", "error", err)
+	}
 }
 
 // UpdateKnokRequest represents the request body for updating a knok

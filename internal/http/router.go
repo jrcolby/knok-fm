@@ -69,9 +69,9 @@ func (r *Router) SetupRoutes() http.Handler {
 	r.mux.HandleFunc("GET /api/v1/knoks/search", r.knoksHandler.SearchKnoks)
 	r.mux.HandleFunc("GET /api/v1/knoks/random", r.knoksHandler.GetRandomKnok)
 
-	// API v1 routes - Admin endpoints for managing knoks
-	r.mux.HandleFunc("DELETE /api/v1/knoks/{id}", r.knoksHandler.DeleteKnok)
-	r.mux.HandleFunc("PATCH /api/v1/knoks/{id}", r.knoksHandler.UpdateKnok)
+	// API v1 routes - Admin endpoints for managing knoks (protected by auth middleware)
+	r.mux.Handle("DELETE /api/v1/admin/knoks/{id}", r.adminAuth.Middleware(http.HandlerFunc(r.knoksHandler.DeleteKnok)))
+	r.mux.Handle("PATCH /api/v1/admin/knoks/{id}", r.adminAuth.Middleware(http.HandlerFunc(r.knoksHandler.UpdateKnok)))
 	r.mux.Handle("POST /api/v1/admin/knoks/{id}/refresh", r.adminAuth.Middleware(http.HandlerFunc(r.knoksHandler.RefreshKnok)))
 
 	// Admin platform management endpoints (protected by auth middleware)
