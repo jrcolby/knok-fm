@@ -6,10 +6,11 @@ import { useAdmin } from '../contexts/AdminContext';
 export function JanitorLogin() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const { login } = useAdmin();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -18,11 +19,24 @@ export function JanitorLogin() {
       return;
     }
 
-    // Store the API key (which is the password)
-    login(password);
+    setIsLoading(true);
 
-    // Redirect to main knoks page in admin mode
-    navigate('/knoks');
+    try {
+      // Validate the API key before allowing login
+      const isValid = await login(password);
+
+      if (!isValid) {
+        setError('Invalid API key. Please check your credentials and try again.');
+        return;
+      }
+
+      // Redirect to main knoks page in admin mode
+      navigate('/knoks');
+    } catch (err) {
+      setError('Failed to validate API key. Please check your network connection.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -44,7 +58,10 @@ export function JanitorLogin() {
               id="password"
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setError(''); // Clear error on input change
+              }}
               className="w-full px-4 py-2 rounded bg-stone-800 text-white border border-stone-700 focus:border-blue-500 focus:outline-none"
               placeholder="Enter admin password"
               autoFocus
@@ -57,9 +74,10 @@ export function JanitorLogin() {
 
           <button
             type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition-colors"
+            disabled={isLoading}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded transition-colors"
           >
-            Login
+            {isLoading ? 'Validating...' : 'Login'}
           </button>
         </form>
 
