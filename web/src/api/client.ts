@@ -1,4 +1,4 @@
-import type { KnoksResponse, KnokDto } from "./types";
+import type { KnoksResponse, KnokDto, DeleteKnokResponse } from "./types";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
@@ -38,9 +38,21 @@ class ApiClient {
       const response = await fetch(url, config);
 
       if (!response.ok) {
+        // Handle 401 Unauthorized
+        if (response.status === 401) {
+          throw new ApiError(401, 'Unauthorized - invalid admin credentials');
+        }
+
+        // Handle 404 Not Found
+        if (response.status === 404) {
+          throw new ApiError(404, 'Knok not found - may have been already deleted');
+        }
+
+        // Generic error
+        const errorData = await response.json().catch(() => ({}));
         throw new ApiError(
           response.status,
-          `HTTP ${response.status}: ${response.statusText}`
+          errorData.message || `HTTP ${response.status}: ${response.statusText}`
         );
       }
 
@@ -53,9 +65,7 @@ class ApiClient {
       // Network or other fetch errors
       throw new ApiError(
         0,
-        `Network error: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
+        `Network error - please check your connection`
       );
     }
   }
@@ -111,6 +121,43 @@ class ApiClient {
   }
   async healthCheck(): Promise<{ status: string }> {
     return this.request<{ status: string }>("/health");
+  }
+
+  /**
+   * Delete a knok (admin only)
+   */
+  async deleteKnok(id: string, apiKey: string): Promise<DeleteKnokResponse> {
+    return this.request<DeleteKnokResponse>(
+      `/api/v1/admin/knoks/${id}`,
+      {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+        },
+      }
+    );
+  }
+
+  /**
+   * Refresh knok metadata (admin only)
+   * @param url Optional new URL to refresh from
+   */
+  async refreshKnok(
+    id: string,
+    url: string | undefined,
+    apiKey: string
+  ): Promise<KnokDto> {
+    return this.request<KnokDto>(
+      `/api/v1/admin/knoks/${id}/refresh`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: url ? JSON.stringify({ url }) : undefined,
+      }
+    );
   }
 }
 

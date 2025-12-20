@@ -22,6 +22,16 @@ export interface KnoksResponse {
   cursor?: string;
 }
 
+// Admin API types
+export interface DeleteKnokResponse {
+  message: string;
+  knok: KnokDto;
+}
+
+export interface RefreshKnokRequest {
+  url?: string; // Optional - if omitted, uses existing URL
+}
+
 export interface ServerDto {
   id: string;
   name: string;

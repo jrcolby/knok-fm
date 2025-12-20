@@ -1,13 +1,16 @@
-import { Search, X } from "lucide-react";
-import { useSearchParams } from "react-router";
+import { Search, X, LogOut } from "lucide-react";
+import { useSearchParams, useNavigate } from "react-router";
 import { useState, useRef, useEffect } from "react";
 import { KnokFmLogo, KnokStar } from "./icons";
+import { useAdmin } from "../contexts/AdminContext";
 
 export function Header() {
   const [searchParams, setSearchParams] = useSearchParams();
   const searchQuery = searchParams.get("q") || "";
   const [isSearchOpen, setIsSearchOpen] = useState(!!searchQuery);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { isAdmin, logout } = useAdmin();
+  const navigate = useNavigate();
 
   // Open search if there's a query in URL
   useEffect(() => {
@@ -57,6 +60,11 @@ export function Header() {
     }
   };
 
+  const handleLogout = () => {
+    logout();
+    navigate('/knoks');
+  };
+
   return (
     <header className="sticky top-0 z-50 bg-neutral-800/80 backdrop-blur-md shadow-lg">
       <div className="max-w-7xl mx-auto px-4 relative min-h-[3.5rem] flex items-center justify-between w-full">
@@ -73,6 +81,19 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-2 ml-auto">
+          {isAdmin && (
+            <button
+              onClick={handleLogout}
+              className={`flex items-center gap-2 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors ${
+                isSearchOpen ? "opacity-0 pointer-events-none" : "opacity-100"
+              }`}
+              title="Exit Admin Mode"
+            >
+              <LogOut size={18} />
+              <span className="hidden sm:inline">Exit Admin</span>
+            </button>
+          )}
+
           <button
             onClick={handleRandomKnok}
             className={`flex items-center justify-center p-2 text-knok-accent hover:text-knok-accent/80 transition-opacity duration-300 cursor-pointer ${
