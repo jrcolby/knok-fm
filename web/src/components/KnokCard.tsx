@@ -6,6 +6,13 @@ import {
   needsFallbackLogo,
   LOGO_TYPES,
 } from "../utils/logoFallback";
+import { useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router';
+import { useAdmin } from '../contexts/AdminContext';
+import { DeleteKnokModal } from './DeleteKnokModal';
+import { RefreshKnokModal } from './RefreshKnokModal';
+import { apiClient } from '../api/client';
+import { Trash2, RefreshCw } from 'lucide-react';
 
 interface KnokCardProps {
   knok: KnokDto;
@@ -14,6 +21,12 @@ interface KnokCardProps {
 function KnokCardComponent({ knok }: KnokCardProps) {
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showRefreshModal, setShowRefreshModal] = useState(false);
+
+  const { isAdmin, apiKey, logout } = useAdmin();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   // Determine which fallback logo to use (deterministic based on knok ID)
   const logoType = getRandomLogoType(knok.id);
@@ -29,8 +42,66 @@ function KnokCardComponent({ knok }: KnokCardProps) {
     setImageLoading(false);
   };
 
+  const handleDelete = async () => {
+    if (!apiKey) return;
+
+    try {
+      await apiClient.deleteKnok(knok.id, apiKey);
+      // Invalidate cache to refresh list
+      queryClient.invalidateQueries({ queryKey: ['knoks'] });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Unauthorized')) {
+        // Invalid API key - logout and redirect to janitor login
+        logout();
+        navigate('/janitor');
+      }
+      throw error; // Re-throw for modal to display
+    }
+  };
+
+  const handleRefresh = async (url: string | undefined) => {
+    if (!apiKey) return;
+
+    try {
+      await apiClient.refreshKnok(knok.id, url, apiKey);
+      // Invalidate cache to refresh knok data
+      queryClient.invalidateQueries({ queryKey: ['knoks'] });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Unauthorized')) {
+        logout();
+        navigate('/janitor');
+      }
+      throw error;
+    }
+  };
+
   return (
-    <article className="bg-knok-bg border border-stone-700 rounded-lg shadow-lg p-4 hover:shadow-xl hover:border-yellow-400/30 transition-all duration-200 h-38">
+    <article className="bg-knok-bg border border-stone-700 rounded-lg shadow-lg p-4 hover:shadow-xl hover:border-yellow-400/30 transition-all duration-200 h-38 relative">
+      {isAdmin && (
+        <div className="absolute top-2 right-2 flex gap-2 z-10">
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              setShowRefreshModal(true);
+            }}
+            className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg transition-colors"
+            title="Refresh knok metadata"
+          >
+            <RefreshCw size={16} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              setShowDeleteModal(true);
+            }}
+            className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-lg transition-colors"
+            title="Delete knok"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
+      )}
+
       <a
         href={knok.url}
         target="_blank"
@@ -85,6 +156,20 @@ function KnokCardComponent({ knok }: KnokCardProps) {
           </div>
         </div>
       </a>
+
+      <DeleteKnokModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleDelete}
+        knok={knok}
+      />
+
+      <RefreshKnokModal
+        isOpen={showRefreshModal}
+        onClose={() => setShowRefreshModal(false)}
+        onConfirm={handleRefresh}
+        knok={knok}
+      />
     </article>
   );
 }
