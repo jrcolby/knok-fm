@@ -135,7 +135,7 @@ func main() {
 	log.Info("Platform loader initialized", "platform_count", platformLoader.Count())
 
 	// Create URL detector
-	urlDet := urldetector.New(platformLoader, log)
+	urlDet := urldetector.New(platformLoader, nil, log)
 
 	// Create seeder
 	seeder := &Seeder{
@@ -398,8 +398,8 @@ func (s *Seeder) processURL(ctx context.Context, message *discordgo.Message, url
 		return nil
 	}
 
-	// Check if knok already exists
-	existingKnok, err := s.knokRepo.GetByURL(ctx, s.guildID, urlInfo.URL)
+	// Check if knok already exists by canonical URL
+	existingKnok, err := s.knokRepo.GetByCanonicalURL(ctx, s.guildID, urlInfo.CanonicalURL)
 	if err == nil && existingKnok != nil {
 		s.logger.Debug("Knok already exists, skipping",
 			"knok_id", existingKnok.ID,
@@ -431,6 +431,7 @@ func (s *Seeder) processURL(ctx context.Context, message *discordgo.Message, url
 		ID:               knokID,
 		ServerID:         s.guildID,
 		URL:              urlInfo.URL,
+		CanonicalURL:     urlInfo.CanonicalURL,
 		Platform:         urlInfo.Platform,
 		DiscordMessageID: message.ID,
 		DiscordChannelID: message.ChannelID,

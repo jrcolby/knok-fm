@@ -1,18 +1,22 @@
 package urldetector
 
 import (
+	"context"
 	"knock-fm/internal/domain"
+	"knock-fm/internal/pkg/urlresolver"
 	"log/slog"
 	"net/url"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 )
 
 // URLInfo contains information about a detected URL
 type URLInfo struct {
-	URL      string
-	Platform string
+	URL          string // Original (normalized) URL as posted
+	CanonicalURL string // Resolved + canonicalized URL for dedup
+	Platform     string
 }
 
 // PlatformLoader defines the interface for loading platform configurations
@@ -24,6 +28,7 @@ type PlatformLoader interface {
 // Detector provides centralized URL detection using platform loader
 type Detector struct {
 	loader   PlatformLoader
+	resolver *urlresolver.Resolver
 	logger   *slog.Logger
 	patterns []compiledPattern
 	mu       sync.RWMutex
@@ -34,11 +39,13 @@ type compiledPattern struct {
 	platform string
 }
 
-// New creates a new URL detector using the platform loader
-func New(loader PlatformLoader, logger *slog.Logger) *Detector {
+// New creates a new URL detector using the platform loader and optional resolver.
+// If resolver is nil, short link resolution is skipped.
+func New(loader PlatformLoader, resolver *urlresolver.Resolver, logger *slog.Logger) *Detector {
 	detector := &Detector{
-		loader: loader,
-		logger: logger,
+		loader:   loader,
+		resolver: resolver,
+		logger:   logger,
 	}
 	detector.buildPatterns()
 	return detector
@@ -222,19 +229,41 @@ func (d *Detector) addIfSupported(rawURL string, urls *[]URLInfo, seen map[strin
 		return
 	}
 
-	// Check for duplicates using normalized form
-	if seen[normalizedURL] {
+	// Resolve short links before canonicalization
+	resolvedURL := normalizedURL
+	if d.resolver != nil && d.resolver.IsShortLink(normalizedURL) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		resolved, err := d.resolver.Resolve(ctx, normalizedURL)
+		if err != nil {
+			d.logger.Warn("Failed to resolve short link, using original",
+				"url", normalizedURL, "error", err)
+		} else {
+			resolvedURL = resolved
+		}
+	}
+
+	// Canonicalize the resolved URL for dedup
+	canonicalURL, err := CanonicalizeURL(resolvedURL)
+	if err != nil {
+		// Fallback: use the normalized URL as canonical
+		canonicalURL = normalizedURL
+	}
+
+	// Check for duplicates using canonical form
+	if seen[canonicalURL] {
 		return
 	}
 
-	// Detect platform using normalized URL
-	platform := d.detectPlatformFromURL(normalizedURL)
+	// Detect platform using resolved URL (better match after short link resolution)
+	platform := d.detectPlatformFromURL(resolvedURL)
 
 	// Add to results (including unknown platforms)
-	seen[normalizedURL] = true
+	seen[canonicalURL] = true
 	*urls = append(*urls, URLInfo{
-		URL:      normalizedURL,
-		Platform: platform,
+		URL:          normalizedURL,
+		CanonicalURL: canonicalURL,
+		Platform:     platform,
 	})
 }
 

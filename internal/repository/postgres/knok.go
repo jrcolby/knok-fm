@@ -16,7 +16,7 @@ import (
 )
 
 const knokSelectFields = `
-	SELECT id, server_id, url, platform, title,
+	SELECT id, server_id, url, canonical_url, platform, title,
 		   discord_message_id, discord_channel_id,
 		   message_content, metadata, extraction_status, posted_at,
 		   created_at, updated_at
@@ -81,6 +81,7 @@ func (r *KnokRepository) scanKnokRow(scanner interface{ Scan(...interface{}) err
 		&knok.ID,
 		&knok.ServerID,
 		&knok.URL,
+		&knok.CanonicalURL,
 		&knok.Platform,
 		&title,
 		&knok.DiscordMessageID,
@@ -272,12 +273,12 @@ func (r *KnokRepository) Search(ctx context.Context, searchQuery string, cursor 
 func (r *KnokRepository) Create(ctx context.Context, knok *domain.Knok) error {
 	query := `
 		INSERT INTO knoks (
-			id, server_id, url, platform, title,
+			id, server_id, url, canonical_url, platform, title,
 			discord_message_id, discord_channel_id,
 			message_content, metadata, extraction_status, posted_at,
 			created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 		)`
 
 	// Handle nullable fields
@@ -318,6 +319,7 @@ func (r *KnokRepository) Create(ctx context.Context, knok *domain.Knok) error {
 		knok.ID,
 		knok.ServerID,
 		knok.URL,
+		knok.CanonicalURL,
 		knok.Platform,
 		title,
 		knok.DiscordMessageID,
@@ -355,15 +357,16 @@ func (r *KnokRepository) Update(ctx context.Context, knok *domain.Knok) error {
 		UPDATE knoks SET
 			server_id = $2,
 			url = $3,
-			platform = $4,
-			title = $5,
-			discord_message_id = $6,
-			discord_channel_id = $7,
-			message_content = $8,
-			metadata = $9,
-			extraction_status = $10,
-			posted_at = $11,
-			updated_at = $12
+			canonical_url = $4,
+			platform = $5,
+			title = $6,
+			discord_message_id = $7,
+			discord_channel_id = $8,
+			message_content = $9,
+			metadata = $10,
+			extraction_status = $11,
+			posted_at = $12,
+			updated_at = $13
 		WHERE id = $1`
 
 	// Handle nullable fields
@@ -402,6 +405,7 @@ func (r *KnokRepository) Update(ctx context.Context, knok *domain.Knok) error {
 		knok.ID,
 		knok.ServerID,
 		knok.URL,
+		knok.CanonicalURL,
 		knok.Platform,
 		title,
 		knok.DiscordMessageID,
@@ -475,6 +479,29 @@ func (r *KnokRepository) GetByURL(ctx context.Context, serverID, url string) (*d
 	}
 
 	r.logger.Debug("Found existing knok", "knok_id", knok.ID, "server_id", serverID, "url", url)
+	return knok, nil
+}
+
+// GetByCanonicalURL finds knoks by canonical URL within a server (for duplicate detection)
+func (r *KnokRepository) GetByCanonicalURL(ctx context.Context, serverID, canonicalURL string) (*domain.Knok, error) {
+	query := knokSelectFields + `
+		WHERE server_id = $1 AND canonical_url = $2
+		ORDER BY created_at DESC
+		LIMIT 1`
+
+	row := r.db.QueryRowContext(ctx, query, serverID, canonicalURL)
+
+	knok, err := r.scanKnokRow(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			r.logger.Debug("No duplicate knok found by canonical URL", "server_id", serverID, "canonical_url", canonicalURL)
+			return nil, sql.ErrNoRows
+		}
+		r.logger.Error("Failed to query knok by canonical URL", "error", err, "server_id", serverID, "canonical_url", canonicalURL)
+		return nil, fmt.Errorf("failed to query knok by canonical URL: %w", err)
+	}
+
+	r.logger.Debug("Found existing knok by canonical URL", "knok_id", knok.ID, "server_id", serverID, "canonical_url", canonicalURL)
 	return knok, nil
 }
 

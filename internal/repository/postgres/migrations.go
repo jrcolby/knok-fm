@@ -159,6 +159,30 @@ var migrations = []Migration{
 			ALTER TABLE knoks DROP CONSTRAINT IF EXISTS knoks_platform_check;
 		`,
 	},
+	{
+		Version: 6,
+		Name:    "add_canonical_url",
+		SQL: `
+			-- Add canonical_url column for dedup on resolved/canonicalized URLs
+			ALTER TABLE knoks ADD COLUMN IF NOT EXISTS canonical_url TEXT;
+			UPDATE knoks SET canonical_url = url WHERE canonical_url IS NULL;
+			ALTER TABLE knoks ALTER COLUMN canonical_url SET NOT NULL;
+			CREATE INDEX IF NOT EXISTS idx_knoks_server_canonical_url ON knoks(server_id, canonical_url);
+			CREATE INDEX IF NOT EXISTS idx_knoks_server_url ON knoks(server_id, url);
+		`,
+	},
+	{
+		Version: 7,
+		Name:    "fix_spotify_url_patterns",
+		SQL: `
+			-- Add missing Spotify short link domains
+			UPDATE platforms SET url_patterns = array_cat(url_patterns, ARRAY['spotify.link','spoti.fi'])
+				WHERE id = 'spotify' AND NOT ('spotify.link' = ANY(url_patterns));
+			-- Remove incorrect domain
+			UPDATE platforms SET url_patterns = array_remove(url_patterns, 'link.tospotify.com')
+				WHERE id = 'spotify';
+		`,
+	},
 }
 
 // RunMigrations executes all pending database migrations

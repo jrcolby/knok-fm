@@ -257,14 +257,15 @@ func (s *BotService) processDetectedURL(message *discordgo.MessageCreate, urlInf
 		}
 	}
 
-	// Check for existing knok with same URL in this server
+	// Check for existing knok with same canonical URL in this server
 	if existingKnok == nil && s.knokRepo != nil {
-		existingKnok, err := s.knokRepo.GetByURL(ctx, message.GuildID, urlInfo.URL)
+		existingKnok, err := s.knokRepo.GetByCanonicalURL(ctx, message.GuildID, urlInfo.CanonicalURL)
 		if err == nil && existingKnok != nil {
 			// Use existing knok ID
 			knokID = existingKnok.ID
-			s.logger.Debug("Found existing knok by URL",
+			s.logger.Debug("Found existing knok by canonical URL",
 				"knok_id", knokID,
+				"canonical_url", urlInfo.CanonicalURL,
 				"extraction_status", existingKnok.ExtractionStatus,
 			)
 		}
@@ -318,6 +319,7 @@ func (s *BotService) processDetectedURL(message *discordgo.MessageCreate, urlInf
 			ID:               knokID,
 			ServerID:         message.GuildID,
 			URL:              urlInfo.URL,
+			CanonicalURL:     urlInfo.CanonicalURL,
 			Platform:         urlInfo.Platform,
 			DiscordMessageID: message.ID,
 			DiscordChannelID: message.ChannelID,

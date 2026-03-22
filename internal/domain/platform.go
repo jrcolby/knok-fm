@@ -79,7 +79,8 @@ func GetDefaultPlatformConfig() PlatformConfig {
 					"spotify.com",
 					"open.spotify.com",   // Web player
 					"play.spotify.com",   // Legacy
-					"link.tospotify.com", // Mobile share
+					"spotify.link",     // Short link
+					"spoti.fi",         // Short link
 				},
 			},
 			PlatformAppleMusic: {

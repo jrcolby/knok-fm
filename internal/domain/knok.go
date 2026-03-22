@@ -10,8 +10,9 @@ import (
 type Knok struct {
 	ID       uuid.UUID `json:"id" db:"id"`
 	ServerID string    `json:"server_id" db:"server_id"`
-	URL      string    `json:"url" db:"url"`
-	Platform string    `json:"platform" db:"platform"`
+	URL          string `json:"url" db:"url"`
+	CanonicalURL string `json:"canonical_url" db:"canonical_url"`
+	Platform     string `json:"platform" db:"platform"`
 	Title    *string   `json:"title" db:"title"`
 
 	// Discord-specific fields

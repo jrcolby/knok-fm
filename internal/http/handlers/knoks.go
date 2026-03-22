@@ -431,12 +431,14 @@ func (h *KnoksHandler) RefreshKnok(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse request body (optional URL)
+	// Parse request body (optional URL — empty body is valid)
 	var req RefreshKnokRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.logger.Warn("Invalid request body", "error", err)
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
+			h.logger.Warn("Invalid request body", "error", err)
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
 	}
 
 	// Check if knok exists

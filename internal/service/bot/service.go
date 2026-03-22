@@ -6,6 +6,7 @@ import (
 	"knock-fm/internal/config"
 	"knock-fm/internal/domain"
 	"knock-fm/internal/pkg/urldetector"
+	"knock-fm/internal/pkg/urlresolver"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -52,7 +53,7 @@ func New(
 		queueRepo:   queueRepo,
 		knokRepo:    knokRepo,
 		serverRepo:  serverRepo,
-		urlDetector: urldetector.New(platformLoader, logger),
+		urlDetector: urldetector.New(platformLoader, urlresolver.New(logger), logger),
 		ctx:         ctx,
 		cancel:      cancel,
 	}

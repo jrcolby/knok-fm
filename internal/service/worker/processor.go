@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"knock-fm/internal/domain"
+	"knock-fm/internal/pkg/urldetector"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -148,6 +149,19 @@ func (p *JobProcessor) ProcessMetadataExtraction(ctx context.Context, payload ma
 
 		// Update extraction status
 		knok.ExtractionStatus = domain.ExtractionStatusComplete
+
+		// OG URL writeback: if og:url differs from canonical URL, re-canonicalize
+		if ogURL, ok := extractedMetadata["url"]; ok && ogURL != "" {
+			canonicalized, err := urldetector.CanonicalizeURL(ogURL)
+			if err == nil && canonicalized != knok.CanonicalURL {
+				logger.Info("OG URL writeback: updating canonical URL",
+					"knok_id", knokID,
+					"old_canonical", knok.CanonicalURL,
+					"og_url", ogURL,
+					"new_canonical", canonicalized)
+				knok.CanonicalURL = canonicalized
+			}
+		}
 
 		// Update knok in database
 		if err := p.knokRepo.Update(ctx, knok); err != nil {

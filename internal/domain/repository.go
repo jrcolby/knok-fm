@@ -33,6 +33,9 @@ type KnokRepository interface {
 	// GetByURL finds knoks by URL within a server (for duplicate detection)
 	GetByURL(ctx context.Context, serverID, url string) (*Knok, error)
 
+	// GetByCanonicalURL finds knoks by canonical URL within a server (for duplicate detection)
+	GetByCanonicalURL(ctx context.Context, serverID, canonicalURL string) (*Knok, error)
+
 	// GetRecent gets the most recent knoks across all servers with cursor pagination (global timeline)
 	GetRecent(ctx context.Context, cursor *time.Time, limit int) ([]*Knok, error)
 
