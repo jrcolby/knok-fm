@@ -198,7 +198,12 @@ func (w *WorkerService) processJobType(jobType string) {
 	}
 }
 
-// processJob processes a single job
+// jobTimeout is the maximum time a single job is allowed to run before being abandoned.
+// This prevents stuck Chromium/Rod processes from deadlocking the worker.
+const jobTimeout = 90 * time.Second
+
+// processJob processes a single job in an isolated goroutine with a hard timeout.
+// If the job doesn't complete within jobTimeout, the worker moves on.
 func (w *WorkerService) processJob(job *domain.QueueJob) {
 	startTime := time.Now()
 	jobLogger := w.logger.With(
@@ -213,17 +218,37 @@ func (w *WorkerService) processJob(job *domain.QueueJob) {
 		jobLogger.Error("Failed to mark job as processing", "error", err)
 	}
 
-	// Process the job based on type
+	// Run the job in a goroutine with a timeout so a stuck process can't block the worker loop
+	jobCtx, jobCancel := context.WithTimeout(w.ctx, jobTimeout)
+	defer jobCancel()
+
+	resultCh := make(chan error, 1)
+	go func() {
+		var processingErr error
+		switch job.Type {
+		case domain.JobTypeExtractMetadata:
+			processingErr = w.processor.ProcessMetadataExtraction(jobCtx, job.Payload, jobLogger)
+		case domain.JobTypeProcessKnok:
+			processingErr = w.processor.ProcessKnok(jobCtx, job.Payload, jobLogger)
+		case domain.JobTypeNotifyComplete:
+			processingErr = w.processor.ProcessNotification(jobCtx, job.Payload, jobLogger)
+		default:
+			processingErr = fmt.Errorf("unknown job type: %s", job.Type)
+		}
+		resultCh <- processingErr
+	}()
+
+	// Wait for job completion or timeout
 	var processingErr error
-	switch job.Type {
-	case domain.JobTypeExtractMetadata:
-		processingErr = w.processor.ProcessMetadataExtraction(w.ctx, job.Payload, jobLogger)
-	case domain.JobTypeProcessKnok:
-		processingErr = w.processor.ProcessKnok(w.ctx, job.Payload, jobLogger)
-	case domain.JobTypeNotifyComplete:
-		processingErr = w.processor.ProcessNotification(w.ctx, job.Payload, jobLogger)
-	default:
-		processingErr = fmt.Errorf("unknown job type: %s", job.Type)
+	select {
+	case processingErr = <-resultCh:
+		// Job completed (success or failure)
+	case <-jobCtx.Done():
+		processingErr = fmt.Errorf("job timed out after %s", jobTimeout)
+		jobLogger.Error("Job timed out — abandoned to unblock worker",
+			"timeout", jobTimeout,
+			"job_id", job.ID,
+		)
 	}
 
 	// Update job status based on result
