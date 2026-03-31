@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -129,8 +130,18 @@ func (w *WorkerService) processJobs() {
 			w.logger.Info("Job processing stopped")
 			return
 		case <-ticker.C:
+			w.writeHeartbeat()
 			w.processPendingJobs()
 		}
+	}
+}
+
+// writeHeartbeat writes the current unix timestamp to the heartbeat file.
+// Docker healthcheck uses this to detect a stuck worker and trigger a restart.
+func (w *WorkerService) writeHeartbeat() {
+	ts := strconv.FormatInt(time.Now().Unix(), 10)
+	if err := os.WriteFile(heartbeatFile, []byte(ts), 0644); err != nil {
+		w.logger.Warn("Failed to write heartbeat", "error", err)
 	}
 }
 
@@ -198,9 +209,15 @@ func (w *WorkerService) processJobType(jobType string) {
 	}
 }
 
-// jobTimeout is the maximum time a single job is allowed to run before being abandoned.
-// This prevents stuck Chromium/Rod processes from deadlocking the worker.
-const jobTimeout = 90 * time.Second
+const (
+	// jobTimeout is the maximum time a single job is allowed to run before being abandoned.
+	// This prevents stuck Chromium/Rod processes from deadlocking the worker.
+	jobTimeout = 90 * time.Second
+
+	// heartbeatFile is written on every poll cycle with the current unix timestamp.
+	// Docker healthcheck reads this to detect a stuck worker.
+	heartbeatFile = "/tmp/worker-heartbeat"
+)
 
 // processJob processes a single job in an isolated goroutine with a hard timeout.
 // If the job doesn't complete within jobTimeout, the worker moves on.
