@@ -30,6 +30,17 @@ RUN echo 'server { \
     server_name _; \
     root /usr/share/nginx/html; \
     index index.html; \
+    \
+    # Block dotfiles (.env, .git, etc.) \
+    location ~ /\. { \
+        return 404; \
+    } \
+    \
+    # Block common probe paths \
+    location ~* ^/(xmlrpc\.php|wp-login\.php|wp-admin|wp-content|wp-includes) { \
+        return 404; \
+    } \
+    \
     location / { \
         try_files $uri $uri/ /index.html; \
     } \
