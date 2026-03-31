@@ -21,6 +21,8 @@ type OEmbedExtractor struct {
 
 // oEmbedResponse represents the standard oEmbed JSON response
 // See: https://oembed.com/#section2.3
+// Width/Height fields use interface{} because providers are inconsistent:
+// YouTube sends int (480), SoundCloud sends string ("100%").
 type oEmbedResponse struct {
 	Type            string      `json:"type"`             // "video", "photo", "link", "rich"
 	Version         interface{} `json:"version"`          // oEmbed version (should be "1.0" string, but some providers send numeric 1.0)
@@ -30,11 +32,11 @@ type oEmbedResponse struct {
 	ProviderName    string      `json:"provider_name"`    // Provider name (e.g., "YouTube")
 	ProviderURL     string      `json:"provider_url"`     // Provider URL
 	ThumbnailURL    string      `json:"thumbnail_url"`    // Thumbnail image URL
-	ThumbnailWidth  int         `json:"thumbnail_width"`  // Thumbnail width
-	ThumbnailHeight int         `json:"thumbnail_height"` // Thumbnail height
+	ThumbnailWidth  interface{} `json:"thumbnail_width"`  // Thumbnail width (int or string)
+	ThumbnailHeight interface{} `json:"thumbnail_height"` // Thumbnail height (int or string)
 	HTML            string      `json:"html"`             // Embed HTML (for video/rich types)
-	Width           int         `json:"width"`            // Resource width
-	Height          int         `json:"height"`           // Resource height
+	Width           interface{} `json:"width"`            // Resource width (int or string e.g. "100%")
+	Height          interface{} `json:"height"`           // Resource height (int or string)
 	Description     string      `json:"description"`      // Description (not in spec, but some providers include it)
 }
 
