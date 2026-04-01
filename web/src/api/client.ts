@@ -124,6 +124,17 @@ class ApiClient {
   }
 
   /**
+   * Validate an admin API key against a protected endpoint
+   */
+  async validateAdminKey(apiKey: string): Promise<void> {
+    await this.request('/api/v1/admin/platforms', {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+    });
+  }
+
+  /**
    * Delete a knok (admin only)
    */
   async deleteKnok(id: string, apiKey: string): Promise<DeleteKnokResponse> {

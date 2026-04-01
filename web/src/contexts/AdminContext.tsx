@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
+import { apiClient } from '../api/client';
 
 interface AdminContextType {
   isAdmin: boolean;
@@ -25,23 +26,14 @@ export function AdminProvider({ children }: { children: ReactNode }) {
 
   const login = async (key: string): Promise<boolean> => {
     try {
-      // Validate the API key by making a test call to a protected endpoint
-      const response = await fetch('/api/v1/admin/platforms', {
-        headers: {
-          'Authorization': `Bearer ${key}`,
-        },
-      });
-
-      if (!response.ok) {
-        return false;
-      }
+      // Validate the API key by calling a protected admin endpoint through the API client
+      await apiClient.validateAdminKey(key);
 
       // Key is valid, store it
       localStorage.setItem(STORAGE_KEY, key);
       setApiKey(key);
       return true;
-    } catch (error) {
-      console.error('API key validation failed:', error);
+    } catch {
       return false;
     }
   };
